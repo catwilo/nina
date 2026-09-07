@@ -157,12 +157,12 @@ else
     log INFO "registry already cloned: $REGISTRY_DIR"
 fi
 # ---------------------------------------------------------------------------
-# Symlink libs to the shared dir (source of truth stays the repo)
+# Symlink lib/ as a single directory (source of truth stays the repo).
+# lib/ is now organized in subfolders (core/identity/discovery/misc); a
+# per-file *.sh glob here would silently link nothing.
 # ---------------------------------------------------------------------------
-for _l in "$SCRIPT_DIR"/lib/*.sh; do
-    [ -f "$_l" ] || continue
-    ln -sf "$_l" "$LIBDIR/$(basename "$_l")"
-done
+rm -rf "$LIBDIR"
+ln -sf "$SCRIPT_DIR/lib" "$LIBDIR"
 log INFO "libs linked"
 
 # ---------------------------------------------------------------------------
