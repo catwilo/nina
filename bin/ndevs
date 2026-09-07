@@ -27,7 +27,7 @@ else
 fi
 _bindir="$(cd "$(dirname "$_self")" && pwd -P)"
 . "$_bindir/_bootstrap"
-_source_mods util.sh identity.sh blockdb.sh
+_source_mods core/util.sh identity/identity.sh identity/registry.sh core/blockdb.sh
 
 # Internal nssh/nscp calls below never prompt for a password; ssh_config's
 # automation Match block enforces BatchMode yes so a missing key fails fast.

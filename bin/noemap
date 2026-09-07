@@ -127,7 +127,7 @@ echo "Listo. Reconecta SSH para crear el socket en el servidor."
 CLIENTEOF
 }
 if [ "${1:-}" = client-setup ]; then _do_client_setup; exit 0; fi
-_source_mods util.sh blockdb.sh lock.sh identity.sh iface.sh cache.sh scan.sh fingerprint.sh output.sh ssh_bootstrap.sh noemap-dispatch.sh
+_source_mods core/util.sh core/blockdb.sh core/lock.sh core/cache.sh identity/identity.sh identity/registry.sh discovery/iface.sh discovery/scan.sh discovery/fingerprint.sh misc/devices.sh misc/output.sh misc/ssh_bootstrap.sh core/nina-dispatch.sh
 
 
 # ---------------------------------------------------------------------------
