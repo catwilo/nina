@@ -2,11 +2,13 @@
 # noemap — network discovery and SSH device mapper
 #
 # Usage:
-#   noemap              fast scan: find SSH-reachable hosts, show results,
-#                       then prompt to register any new ones
-#   noemap --deep       same scan + OS detection via SSH banner (slower)
-#   noemap --ports      show all open ports per host
-#   noemap -h|--help    full usage for all tools in this suite
+#   noemap                    run the full pipeline (discover, fingerprint,
+#                             register-new, bootstrap-keys, push)
+#   noemap <subcommand>       run a single pipeline step in isolation
+#                             (discover, self-register, seed, fingerprint,
+#                             register-new, bootstrap-keys, push, all)
+#   noemap --ports            show all open ports per host
+#   noemap -h|--help          full usage for all tools in this suite
 #
 # Environment:
 #   NOEMAP_BASE    installation root (default: ~/unix-toolkit-tools/noemap)
@@ -125,7 +127,7 @@ echo "Listo. Reconecta SSH para crear el socket en el servidor."
 CLIENTEOF
 }
 if [ "${1:-}" = client-setup ]; then _do_client_setup; exit 0; fi
-_source_mods util.sh blockdb.sh lock.sh identity.sh iface.sh cache.sh scan.sh fingerprint.sh output.sh ssh_bootstrap.sh
+_source_mods util.sh blockdb.sh lock.sh identity.sh iface.sh cache.sh scan.sh fingerprint.sh output.sh ssh_bootstrap.sh noemap-dispatch.sh
 
 
 # ---------------------------------------------------------------------------
@@ -152,29 +154,44 @@ _do_ssh_setup() {
     log INFO "ssh-setup: $_alias ($_user@$_ip:$_port)"
 
     _key="$HOME/.ssh/id_ed25519"
-    if [ ! -f "$_key" ]; then
-        log INFO "no Ed25519 key found — generating $_key"
+    _pub="${_key}.pub"
+
+    # Verify the existing key is actually functional (exists, correct perms,
+    # ssh-keygen can derive its pubkey) before deciding to reuse or regenerate.
+    _key_is_functional() {
+        [ -f "$_key" ] || return 1
+        [ -f "$_pub" ] || return 1
+        _perm="$(stat -c %a "$_key" 2>/dev/null || echo "")"
+        [ "$_perm" = "600" ] || return 1
+        ssh-keygen -y -f "$_key" >/dev/null 2>&1 || return 1
+        return 0
+    }
+
+    if _key_is_functional; then
+        log INFO "using existing key: $_key"
+    else
+        log WARN "no functional Ed25519 key found — generating $_key"
+        rm -f "$_key" "$_pub"
         mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
         require_cmd ssh-keygen
         ssh-keygen -t ed25519 -f "$_key" -N "" -C "noemap-$(node_alias 2>/dev/null || hostname)" || {
             log ERROR "ssh-keygen failed"; exit 1
         }
         chmod 600 "$_key"
-    else
-        log INFO "using existing key: $_key"
+        chmod 644 "$_pub"
     fi
 
     if has_cmd ssh-copy-id; then
         log INFO "installing key via ssh-copy-id"
-        ssh-copy-id -p "$_port" -i "${_key}.pub" "$_user@$_ip" || {
+        ssh-copy-id -p "$_port" -i "$_pub" "$_user@$_ip" || {
             log ERROR "ssh-copy-id failed"; exit 1
         }
     else
         log WARN "ssh-copy-id not found — using manual fallback"
-        _pub="$(cat "${_key}.pub")"
+        _pubcontent="$(cat "$_pub")"
         ssh -p "$_port" "$_user@$_ip" "
             mkdir -p ~/.ssh && chmod 700 ~/.ssh
-            grep -qxF '$_pub' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$_pub' >> ~/.ssh/authorized_keys
+            grep -qxF '$_pubcontent' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$_pubcontent' >> ~/.ssh/authorized_keys
             chmod 600 ~/.ssh/authorized_keys
         " || { log ERROR "manual key install failed"; exit 1; }
     fi
@@ -186,84 +203,34 @@ _do_ssh_setup() {
         log ERROR "key installed but verification failed — check manually: ssh -p $_port $_user@$_ip"
         exit 1
     fi
+
+    # Offer to purge stale keys from the remote authorized_keys, keeping only
+    # the one just verified. Only offered when running interactively.
+    if [ -t 0 ]; then
+        printf 'Purge other keys from remote authorized_keys, keep only this one? [y/N] '
+        read -r _purge_confirm </dev/tty || _purge_confirm=""
+        case "$_purge_confirm" in
+            [yY]|[yY][eE][sS])
+                _pubcontent="$(cat "$_pub")"
+                if ssh -p "$_port" -o BatchMode=yes -o ConnectTimeout=5 "$_user@$_ip" "
+                    printf '%s\n' '$_pubcontent' > ~/.ssh/authorized_keys
+                    chmod 600 ~/.ssh/authorized_keys
+                "; then
+                    log OK "remote authorized_keys purged — only current key remains"
+                else
+                    log ERROR "purge failed — remote authorized_keys left unchanged"
+                    exit 1
+                fi
+                ;;
+            *)
+                log INFO "purge skipped — remote authorized_keys left unchanged"
+                ;;
+        esac
+    fi
 }
 if [ "${1:-}" = "ssh-setup" ]; then shift; _do_ssh_setup "$@"; exit 0; fi
 
 # ---------------------------------------------------------------------------
-# Parse flags
+# Dispatch to subcommand (noemap#502 -- migrated from monolithic pipeline)
 # ---------------------------------------------------------------------------
-NOEMAP_FULL_PORTS=0
-NOEMAP_DEEP=0
-NOEMAP_IFACE=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --ports)    NOEMAP_FULL_PORTS=1 ;;
-        -f|--fresh) ndevs --resetall ;;
-        --deep)     NOEMAP_DEEP=1 ;;
-        -i)         shift; [ -n "${1:-}" ] || { printf '[ERROR] -i requires an interface name\n' >&2; exit 1; }; NOEMAP_IFACE="$1" ;;
-        -i*)        NOEMAP_IFACE="${1#-i}" ;;
-        -h|--help)  _print_help; exit 0 ;;
-        *)
-            printf '[ERROR] unknown option: %s\n' "$1" >&2
-            printf 'usage: noemap [--deep] [--ports] [-i <iface>] [-h]\n' >&2
-            exit 1
-            ;;
-    esac
-    shift
-done
-export NOEMAP_FULL_PORTS
-export NOEMAP_DEEP
-export NOEMAP_IFACE
-
-
-init_session
-
-trap 'release_lock; cleanup_session' EXIT
-trap 'release_lock; cleanup_session; trap - INT;  kill -INT  "$$"' INT
-trap 'release_lock; cleanup_session; trap - TERM; kill -TERM "$$"' TERM
-
-# ---------------------------------------------------------------------------
-# Pipeline
-# ---------------------------------------------------------------------------
-ensure_dirs
-acquire_lock
-
-log INFO "noemap starting (base=$BASE)"
-
-# Deep mode needs root for nmap -O. Prompt for sudo once, up front, so the
-# scan never stalls mid-way waiting for a password. Termux/no-sudo skip.
-if [ "$NOEMAP_DEEP" = "1" ] && [ -z "${PREFIX:-}" ] && [ "$(id -u)" != "0" ] && has_cmd sudo; then
-    log INFO "deep mode: requesting sudo for OS fingerprint"
-    sudo -v || log WARN "sudo unavailable — OS detection will fall back to passive"
-fi
-
-validate_env
-load_cache
-
-detect_iface
-detect_network
-
-discover_hosts        # Phase 0: validate registered + Phase 1/2: find new
-
-[ -n "${HOST_LIST:-}" ] || {
-    log WARN "no hosts found -- nothing to fingerprint"
-    render_output
-    render_registered_devices
-    sync_devices_to_nodes
-    exit 0
-}
-
-fingerprint_hosts
-_purge_unrescued_stale_aliases   # miko-task#294: purge stale-IP aliases not rescued by hostkey match
-
-save_cache
-render_output
-prompt_new_hosts
-render_connect
-render_active_hosts
-
-# Distribute SSH keys to newly-discovered hosts (noemap#289)
-ssh_key_bootstrap "$DEVICES_DB"
-sync_devices_to_nodes
-
-log OK "noemap completed"
+noemap_dispatch "$@"
