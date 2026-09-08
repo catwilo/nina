@@ -95,6 +95,7 @@ _do_discover() {
 _do_self_register() {
     validate_env
     load_cache
+    detect_iface
     detect_network
     _self_register
 }
