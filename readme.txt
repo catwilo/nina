@@ -1,20 +1,16 @@
 
-  noemap — network discovery and SSH device mapper
+  nina — network discovery and SSH device mapper
   ─────────────────────────────────────────────────────────────────────
 
   DISCOVERY
 
-    noemap                 Fast scan: find SSH hosts on ports 22/8022/2222.
+    nina                   Fast scan: find SSH hosts on ports 22/8022/2222.
                            Validates registered hosts first via ping.
                            Displays results, then prompts to register new hosts.
 
-    noemap --deep          Same scan + SSH banner grab (nmap -sV) to distinguish
-                           Termux/Android from Debian/Ubuntu on port 22.
-                           Slower but more accurate OS type detection.
+    nina --ports           Show all probed ports per host in the results table.
 
-    noemap --ports         Show all probed ports per host in the results table.
 
-    noemap --deep --ports  Combine both flags.
 
   ─────────────────────────────────────────────────────────────────────
 
@@ -34,33 +30,30 @@
     nscp <alias>:/remote/path ./local/    Copy from remote to local.
     nscp ./local/file <alias>:/remote/    Copy from local to remote.
 
-    nclip <alias>:/remote/path            Copy remote file content to clipboard
+    nina clip get <alias>:/remote/path            Copy remote file content to clipboard
                                           (requires clipso / xclip / pbcopy).
 
   ─────────────────────────────────────────────────────────────────────
 
   CLIP (clipboard forwarding, tmux-backed)
 
-    nclip-listen start                    Start local listener (Unix socket,
-                                          tmux session "nclip-listen").
-    nclip-listen stop                     Stop listener, remove socket.
-    nclip-listen restart                  stop + start.
-    nclip-listen status                   Show running state and socket path.
-    nclip-listen foreground               Run accept-loop in foreground
-                                          (for launchd/systemd KeepAlive).
+    nina clip tunnel start                    Start local listener (Unix socket,
+                                          tmux session "nina-clip-tunnel").
+    nina clip tunnel stop                     Stop listener, remove socket.
+    nina clip tunnel restart                  stop + start.
+    nina clip tunnel status                   Show running state and socket path.
+    nina clip serve start                   Start TCP listener (tmux session
+                                          "nina-clip-serve", requires ncat).
+    nina clip serve stop                    Stop TCP listener.
+    nina clip serve restart                 stop + start.
+    nina clip serve status                  Show TCP listener state.
 
-    nclip-listen start-tcp                Start TCP listener (tmux session
-                                          "nclip-listen-tcp", requires ncat).
-    nclip-listen stop-tcp                 Stop TCP listener.
-    nclip-listen restart-tcp              stop-tcp + start-tcp.
-    nclip-listen status-tcp               Show TCP listener state.
-
-    nclip-set <src> <dst>                 Define clipboard direction (src sends,
-                                          dst receives). Starts nclip-listen
-                                          start-tcp on dst, then runs a
+    nina clip set <src> <dst>                 Define clipboard direction (src sends,
+                                          dst receives). Starts nina clip serve
+                                          start on dst, then runs a
                                           smoke-test send+read to confirm.
-    nclip-set status                      Show current direction config.
-    nclip-set clear                       Stop listener on dst, remove config.
+    nina clip status                      Show current direction config.
+    nina clip clear                       Stop listener on dst, remove config.
 
                                           Direction is explicit, not inferred
                                           from ssh initiator. Not persisted
@@ -68,30 +61,28 @@
 
   ─────────────────────────────────────────────────────────────────────
 
-  DEVICE MANAGEMENT  (ndevs)
+  DEVICE MANAGEMENT  (nina devices)
 
-    ndevs                              List all registered devices.
-    ndevs --edit <alias>               Edit alias / IP / user / port.
-    ndevs --rename <old> <new>         Rename alias.
-    ndevs --remove <alias> [alias...]  Remove one or more devices.
-    ndevs --update-ip <alias> <ip>     Update IP, auto-clean known_hosts.
-    ndevs --resetall                   Wipe devices.db + known_hosts + hosts.db + cache.
+    nina devices list                  List all registered devices.
+    nina devices edit <alias>               Edit alias / IP / user / port.
+    nina devices rename <old> <new>         Rename alias.
+    nina devices remove <alias> [alias...]  Remove one or more devices.
+    nina devices update-ip <alias> <ip>     Update IP, auto-clean known_hosts.
+    nina devices resetall                   Wipe devices.db + known_hosts + hosts.db + cache.
 
   ─────────────────────────────────────────────────────────────────────
 
   NOTES
 
     • Aliases are short names you assign during registration (deb, cel, pi ...).
-    • All tools resolve aliases from  $NOEMAP_BASE/state/devices.db
-    • SSH config lives at            $NOEMAP_BASE/config/ssh_config
-    • known_hosts lives at           ~/.local/share/noemap/known_hosts
-    • Logs at                        $NOEMAP_BASE/logs/noemap.log
+    • All tools resolve aliases from  $NINA_BASE/state/devices.db
+    • SSH config lives at            $NINA_BASE/config/ssh_config
+    • known_hosts lives at           ~/.local/share/nina/known_hosts
+    • Logs at                        $NINA_BASE/logs/nina.log
 
     • On each run: registered hosts are pinged first. Non-responding hosts
       are removed automatically. Responding hosts skip the full scan.
 
-    • Fast mode:  type detection = port only (8022->android, 22/2222->linux).
-                  No nmap -sV, no banner grab. Safe and quick on Termux.
-    • Deep mode:  adds banner grab on port 22 to tell Termux apart from
-                  a real Debian/Ubuntu sshd. Use when type matters.
+    • Type detection = port only (8022->android, 22/2222->linux).
+      No nmap -sV, no banner grab. Safe and quick on Termux.
 
