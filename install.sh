@@ -360,15 +360,15 @@ ssh_key_bootstrap() {
 
     # blockdb.sh must load before identity.sh, which calls blockdb_get/
     # blockdb_field internally.
-    if [ -f "$LIBDIR/blockdb.sh" ]; then
+    if [ -f "$LIBDIR/core/blockdb.sh" ]; then
         # shellcheck source=/dev/null
-        . "$LIBDIR/blockdb.sh"
+        . "$LIBDIR/core/blockdb.sh"
     fi
     # Load is_local_ip so we never try to SSH into ourselves (local IPs are
     # dynamic/router-assigned; enumerated live via ifconfig in identity.sh).
-    if [ -f "$LIBDIR/identity.sh" ]; then
+    if [ -f "$LIBDIR/identity/identity.sh" ]; then
         # shellcheck source=/dev/null
-        . "$LIBDIR/identity.sh"
+        . "$LIBDIR/identity/identity.sh"
     fi
 
     _pubdata="$(cat "$_pub")"
