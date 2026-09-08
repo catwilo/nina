@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# noemap — network discovery and SSH device mapper
+# nina — network discovery and SSH device mapper
 #
 # Usage:
-#   noemap                    run the full pipeline (discover, fingerprint,
+#   nina                    run the full pipeline (discover, fingerprint,
 #                             register-new, bootstrap-keys, push)
-#   noemap <subcommand>       run a single pipeline step in isolation
+#   nina <subcommand>       run a single pipeline step in isolation
 #                             (discover, self-register, seed, fingerprint,
 #                             register-new, bootstrap-keys, push, all)
-#   noemap --ports            show all open ports per host
-#   noemap -h|--help          full usage for all tools in this suite
+#   nina --ports            show all open ports per host
+#   nina -h|--help          full usage for all tools in this suite
 #
 # Environment:
-#   NOEMAP_BASE    installation root (default: ~/unix-toolkit-tools/noemap)
+#   NINA_BASE     installation root (default: ~/unix-toolkit-tools/nina)
 #
 # Exit codes:
 #   0  completed successfully
@@ -20,10 +20,10 @@
 set -eu
 
 # Derive BASE from this script's own location so install/runtime never
-# depend on a hardcoded path. Honors NOEMAP_BASE override if set.
+# depend on a hardcoded path. Honors NINA_BASE override if set.
 _self="$0"
 case "$_self" in */*) ;; *) _self="$(command -v "$_self")" ;; esac
-# Resolve symlink chain so invocation via ~/.local/bin/noemap finds the
+# Resolve symlink chain so invocation via ~/.local/bin/nina finds the
 # real bin dir (readlink -f is GNU/Termux; fall back to a manual walk).
 if _real="$(readlink -f "$_self" 2>/dev/null)" && [ -n "$_real" ]; then
     _self="$_real"
@@ -56,10 +56,10 @@ _print_help() {
 # output into a shell ON THE CLIENT, or copy-paste it there.
 # ---------------------------------------------------------------------------
 _do_client_setup() {
-    _srv_sock="$HOME/.local/share/noemap/clip.sock"
+    _srv_sock="$HOME/.local/share/nina/clip.sock"
     cat <<'CLIENTEOF'
 #!/usr/bin/env bash
-# noemap client clipboard setup — run ON YOUR Mac or Termux.
+# nina client clipboard setup — run ON YOUR Mac or Termux.
 # Auto-detects OS: macOS -> LaunchAgent (pbsync); else -> background listener.
 # Adds a RemoteForward so the server socket pipes into your local clipboard.
 set -eu
@@ -95,31 +95,31 @@ PLIST
   launchctl load "$HOME/Library/LaunchAgents/io.clipd.agent.plist"
   echo "macOS: LaunchAgent io.clipd.agent cargado"
 else
-  LOCAL_SOCK="$HOME/.local/share/noemap/clip.sock"
+  LOCAL_SOCK="$HOME/.local/share/nina/clip.sock"
   if command -v termux-clipboard-set >/dev/null 2>&1; then CLIP_CMD=termux-clipboard-set
   elif command -v wl-copy >/dev/null 2>&1; then CLIP_CMD=wl-copy
   elif command -v xclip >/dev/null 2>&1; then CLIP_CMD="xclip -selection clipboard"
   else echo "no clipboard tool found"; exit 1; fi
-  cat > "$HOME/.local/bin/noemap-clip-listener" <<LISTENER
+  cat > "$HOME/.local/bin/nina-clip-listener" <<LISTENER
 #!/usr/bin/env bash
 SOCK="$LOCAL_SOCK"
 rm -f "\$SOCK"
 while true; do nc -lU "\$SOCK" 2>/dev/null | $CLIP_CMD || true; done
 LISTENER
-  chmod +x "$HOME/.local/bin/noemap-clip-listener"
-  echo "Linux/Termux: inicia el listener: ~/.local/bin/noemap-clip-listener &"
+  chmod +x "$HOME/.local/bin/nina-clip-listener"
+  echo "Linux/Termux: inicia el listener: ~/.local/bin/nina-clip-listener &"
 fi
 
 touch "$SSH_CONF"; chmod 600 "$SSH_CONF"
-BEG="# >>> noemap-clip $SERVER_HOST >>>"
-END="# <<< noemap-clip $SERVER_HOST <<<"
+BEG="# >>> nina-clip $SERVER_HOST >>>"
+END="# <<< nina-clip $SERVER_HOST <<<"
 TMP="$(mktemp)"
 awk -v b="$BEG" -v e="$END" '$0==b{s=1} s&&$0==e{s=0;next} !s{print}' "$SSH_CONF" > "$TMP"
 {
   cat "$TMP"
   echo "$BEG"
   echo "Host $SERVER_HOST"
-  echo "    RemoteForward /home/u/.local/share/noemap/clip.sock $LOCAL_SOCK"
+  echo "    RemoteForward /home/u/.local/share/nina/clip.sock $LOCAL_SOCK"
   echo "$END"
 } > "$SSH_CONF"
 rm -f "$TMP"
@@ -137,7 +137,7 @@ _source_mods core/util.sh core/blockdb.sh core/lock.sh core/cache.sh identity/id
 # ---------------------------------------------------------------------------
 _do_ssh_setup() {
     _alias="${1:-}"
-    [ -n "$_alias" ] || { printf '[ERROR] usage: noemap ssh-setup <alias>\n' >&2; exit 1; }
+    [ -n "$_alias" ] || { printf '[ERROR] usage: nina ssh-setup <alias>\n' >&2; exit 1; }
 
     _db="$BASE/state/devices.db"
     [ -f "$_db" ] || { log ERROR "devices database missing: $_db"; exit 1; }
@@ -174,7 +174,7 @@ _do_ssh_setup() {
         rm -f "$_key" "$_pub"
         mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
         require_cmd ssh-keygen
-        ssh-keygen -t ed25519 -f "$_key" -N "" -C "noemap-$(node_alias 2>/dev/null || hostname)" || {
+        ssh-keygen -t ed25519 -f "$_key" -N "" -C "nina-$(node_alias 2>/dev/null || hostname)" || {
             log ERROR "ssh-keygen failed"; exit 1
         }
         chmod 600 "$_key"
@@ -231,6 +231,6 @@ _do_ssh_setup() {
 if [ "${1:-}" = "ssh-setup" ]; then shift; _do_ssh_setup "$@"; exit 0; fi
 
 # ---------------------------------------------------------------------------
-# Dispatch to subcommand (noemap#502 -- migrated from monolithic pipeline)
+# Dispatch to subcommand (nina#502 -- migrated from monolithic pipeline)
 # ---------------------------------------------------------------------------
-noemap_dispatch "$@"
+nina_dispatch "$@"
