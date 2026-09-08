@@ -76,10 +76,10 @@ _user="$(_ensure_user "$_name" "$DB" "$_user")"
 export NOEMAP_SSH_ROLE
 
 
-# Start clipboard listener on-demand for interactive sessions; stop on exit
-if [ -t 0 ] && command -v nclip-listen >/dev/null 2>&1; then
-    nclip-listen start >/dev/null 2>&1 || true
-    trap 'nclip-listen stop >/dev/null 2>&1 || true' EXIT INT TERM
+# Start clipboard tunnel on-demand for interactive sessions; stop on exit
+if [ -t 0 ] && command -v nina >/dev/null 2>&1; then
+    nina clip tunnel start >/dev/null 2>&1 || true
+    trap 'nina clip tunnel stop >/dev/null 2>&1 || true' EXIT INT TERM
 fi
 
 _ssh_connect() {
