@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# noemap-dispatch -- subcommand dispatcher for noemap (noemap#502).
-# Sourced modules and BASE are already exported by the caller (bin/noemap).
+# nina-dispatch -- subcommand dispatcher for nina (nina#502).
+# Sourced modules and BASE are already exported by the caller (bin/nina).
 # Each subcommand takes the same global lock as the legacy pipeline to
 # avoid races between nodes writing devices.db/registry.db from an
 # isolated single-subcommand invocation (confirmed 2026-09-06).
@@ -57,11 +57,11 @@ _require_prior_step() {
     [ -s "$_rp_cache" ] && return 0
 
     if [ ! -t 0 ]; then
-        log ERROR "'$_rp_step' has not run yet (no cached state) -- non-interactive context, run: noemap $_rp_step"
+        log ERROR "'$_rp_step' has not run yet (no cached state) -- non-interactive context, run: nina $_rp_step"
         exit 1
     fi
 
-    printf 'noemap: this step needs "%s" to have run first. Run it now? [y/N] ' "$_rp_step" >&2
+    printf 'nina: this step needs "%s" to have run first. Run it now? [y/N] ' "$_rp_step" >&2
     read -r _rp_ans </dev/tty || _rp_ans=""
     case "$_rp_ans" in
         [Yy]*)
@@ -71,7 +71,7 @@ _require_prior_step() {
             esac
             ;;
         *)
-            log INFO "aborted -- run 'noemap $_rp_step' first"
+            log INFO "aborted -- run 'nina $_rp_step' first"
             exit 1
             ;;
     esac
@@ -86,7 +86,7 @@ _do_discover() {
     _save_host_list_cache
     _save_stale_candidates_cache
     if [ -n "${HOST_LIST:-}" ]; then
-        log OK "discover: $(printf '%s\n' "$HOST_LIST" | wc -l | tr -d ' ') host(s) -- cached for 'noemap fingerprint'"
+        log OK "discover: $(printf '%s\n' "$HOST_LIST" | wc -l | tr -d ' ') host(s) -- cached for 'nina fingerprint'"
     else
         log INFO "discover: no hosts found"
     fi
@@ -120,7 +120,7 @@ _do_fingerprint() {
     save_cache
     render_output
     render_active_hosts
-    log OK "fingerprint complete -- run 'noemap register-new' for any unregistered hosts"
+    log OK "fingerprint complete -- run 'nina register-new' for any unregistered hosts"
 }
 
 _do_register_new() {
@@ -403,7 +403,7 @@ _clip_clear() {
 # _clip_tunnel -- migrate from bin/nclip-listen socket mode (pre-fusion).
 # Manages the Unix-socket listener exposed via SSH RemoteForward.
 _clip_tunnel() {
-    SOCK="${CLIP_FORWARD_SOCK:-$HOME/.noemap-clip.sock}"
+    SOCK="${CLIP_FORWARD_SOCK:-$HOME/.nina-clip.sock}"
     CLIP_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/clipso/last"
     _clip_cmd=""
     if command -v termux-clipboard-set >/dev/null 2>&1; then
@@ -792,7 +792,7 @@ _devices_push_vpn() {
     _db="$BASE/state/devices.db"
     [ -f "$_db" ] || { printf '[INFO] no devices registered\n' >&2; exit 0; }
     has_cmd nscp || { log ERROR "nscp not found"; exit 1; }
-    _remote_path="$HOME/.local/share/noemap/state/devices.db"
+    _remote_path="$HOME/.local/share/nina/state/devices.db"
     _aliases="$(awk '
         BEGIN { RS=""; FS="\n" }
         {
@@ -930,7 +930,7 @@ _prompt_field() {
 
 _dispatch_usage() {
     cat <<'USAGE'
-usage: noemap <subcommand> [options]
+usage: nina <subcommand> [options]
 
 subcommands:
   discover        find live SSH hosts on the LAN (does not touch devices.db)
@@ -980,7 +980,7 @@ nina_dispatch() {
     export NOEMAP_IFACE
 
     _dispatch_lock_wrap
-    log INFO "noemap $_sub starting (base=$BASE)"
+    log INFO "nina $_sub starting (base=$BASE)"
 
     case "$_sub" in
         discover)       _do_discover ;;
@@ -996,5 +996,5 @@ nina_dispatch() {
         all)            _do_all ;;
     esac
 
-    log OK "noemap $_sub completed"
+    log OK "nina $_sub completed"
 }

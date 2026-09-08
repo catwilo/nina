@@ -1,18 +1,18 @@
 #!/bin/sh
-# install.sh  noemap installer (symlink model)
+# install.sh  nina installer (symlink model)
 #
 # Symlinks tools, libs, and managed config files directly from the repo
 # checkout, so updates to these files (code, ssh_config) are reflected
 # immediately without re-running install.sh. The repo must remain present
 # at the checked-out path; deleting it will break the installation.
 #
-#   Termux : symlink bin/* → $PREFIX/bin, lib/* → ~/.local/share/noemap/lib
-#   Debian : symlink bin/* → ~/.local/bin, lib/* → ~/.local/share/noemap/lib
-#   config : symlink config/ssh_config → ~/.local/share/noemap/config/ssh_config
-#   state  : real files (devices.db, cache.env) remain in ~/.local/share/noemap/state
+#   Termux : symlink bin/* → $PREFIX/bin, lib/* → ~/.local/share/nina/lib
+#   Debian : symlink bin/* → ~/.local/bin, lib/* → ~/.local/share/nina/lib
+#   config : symlink config/ssh_config → ~/.local/share/nina/config/ssh_config
+#   state  : real files (devices.db, cache.env) remain in ~/.local/share/nina/state
 #
 # Usage:
-#   sh install.sh                     -- install/update noemap (idempotent)
+#   sh install.sh                     -- install/update nina (idempotent)
 #   sh install.sh client-setup <host> -- emit CLIENT clipboard setup script
 #   sh install.sh -h | --help         -- show this help
 #
@@ -32,7 +32,7 @@ _usage() {
 usage: install.sh [command]
 
 commands:
-  (none)              install/update noemap (idempotent, default)
+  (none)              install/update nina (idempotent, default)
   client-setup <host> emit a script to configure the SSH CLIENT clipboard
   -h, --help          show this help
 USAGE
@@ -43,10 +43,10 @@ USAGE
 # server's clipboard socket forwards into the client's native clipboard.
 # ---------------------------------------------------------------------------
 _do_client_setup() {
-    _srv_sock="$HOME/.local/share/noemap/clip.sock"
+    _srv_sock="$HOME/.local/share/nina/clip.sock"
     cat <<'CLIENTEOF'
 #!/usr/bin/env bash
-# noemap client clipboard setup -- run ON YOUR Mac or Termux.
+# nina client clipboard setup -- run ON YOUR Mac or Termux.
 # Auto-detects OS: macOS -> LaunchAgent (pbsync); else -> background listener.
 # Adds a RemoteForward so the server socket pipes into your local clipboard.
 set -eu
@@ -82,31 +82,31 @@ PLIST
   launchctl load "$HOME/Library/LaunchAgents/io.clipd.agent.plist"
   echo "macOS: LaunchAgent io.clipd.agent cargado"
 else
-  LOCAL_SOCK="$HOME/.local/share/noemap/clip.sock"
+  LOCAL_SOCK="$HOME/.local/share/nina/clip.sock"
   if command -v termux-clipboard-set >/dev/null 2>&1; then CLIP_CMD=termux-clipboard-set
   elif command -v wl-copy >/dev/null 2>&1; then CLIP_CMD=wl-copy
   elif command -v xclip >/dev/null 2>&1; then CLIP_CMD="xclip -selection clipboard"
   else echo "no clipboard tool found"; exit 1; fi
-  cat > "$HOME/.local/bin/noemap-clip-listener" <<LISTENER
+  cat > "$HOME/.local/bin/nina-clip-listener" <<LISTENER
 #!/usr/bin/env bash
 SOCK="$LOCAL_SOCK"
 rm -f "\$SOCK"
 while true; do nc -lU "\$SOCK" 2>/dev/null | $CLIP_CMD || true; done
 LISTENER
-  chmod +x "$HOME/.local/bin/noemap-clip-listener"
-  echo "Linux/Termux: inicia el listener: ~/.local/bin/noemap-clip-listener &"
+  chmod +x "$HOME/.local/bin/nina-clip-listener"
+  echo "Linux/Termux: inicia el listener: ~/.local/bin/nina-clip-listener &"
 fi
 
 touch "$SSH_CONF"; chmod 600 "$SSH_CONF"
-BEG="# >>> noemap-clip $SERVER_HOST >>>"
-END="# <<< noemap-clip $SERVER_HOST <<<"
+BEG="# >>> nina-clip $SERVER_HOST >>>"
+END="# <<< nina-clip $SERVER_HOST <<<"
 TMP="$(mktemp)"
 awk -v b="$BEG" -v e="$END" '$0==b{s=1} s&&$0==e{s=0;next} !s{print}' "$SSH_CONF" > "$TMP"
 {
   cat "$TMP"
   echo "$BEG"
   echo "Host $SERVER_HOST"
-  echo "    RemoteForward /home/u/.local/share/noemap/clip.sock $LOCAL_SOCK"
+  echo "    RemoteForward /home/u/.local/share/nina/clip.sock $LOCAL_SOCK"
   echo "$END"
 } > "$SSH_CONF"
 rm -f "$TMP"
@@ -127,7 +127,7 @@ if [ -n "${PREFIX:-}" ] && [ -d "${PREFIX:-}/bin" ]; then
 else
     BINDIR="$HOME/.local/bin"     # Debian / generic
 fi
-DATADIR="$HOME/.local/share/noemap"
+DATADIR="$HOME/.local/share/nina"
 LIBDIR="$DATADIR/lib"
 STATEDIR="$DATADIR/state"
 CFGDIR="$DATADIR/config"
@@ -140,18 +140,18 @@ chmod 700 "$DATADIR"
 
 
 # ---------------------------------------------------------------------------
-# Registry bootstrap (noemap identity/hostkey trust -- load-bearing, hard-fail)
+# Registry bootstrap (nina identity/hostkey trust -- load-bearing, hard-fail)
 #   Clones the git-backed master registry so this node can read cloud-
 #   registered node identities/hostkeys. Without it, node_alias()/
 #   registry_row_by_hostkey() silently degrade to empty (identity.sh),
 #   causing spurious alias prompts and password fallback instead of
 #   hostkey-based trust. Idempotent: skipped if already cloned.
 # ---------------------------------------------------------------------------
-REGISTRY_DIR="$HOME/.noemap-registry"
+REGISTRY_DIR="$HOME/.nina-registry"
 if [ ! -d "$REGISTRY_DIR/.git" ]; then
-    log INFO "cloning noemap registry..."
-    git clone git@github.com:catwilo/noemap-registry.git "$REGISTRY_DIR" \
-        || fail "registry clone failed -- noemap requires it for identity/hostkey trust. Run manually: git clone git@github.com:catwilo/noemap-registry.git $REGISTRY_DIR"
+    log INFO "cloning nina registry..."
+    git clone git@github.com:catwilo/nina-registry.git "$REGISTRY_DIR" \
+        || fail "registry clone failed -- nina requires it for identity/hostkey trust. Run manually: git clone git@github.com:catwilo/nina-registry.git $REGISTRY_DIR"
     log OK "registry cloned: $REGISTRY_DIR"
 else
     log INFO "registry already cloned: $REGISTRY_DIR"
@@ -172,7 +172,7 @@ if [ -f "$SCRIPT_DIR/readme.txt" ]; then
     ln -sf "$SCRIPT_DIR/readme.txt" "$DATADIR/readme.txt"
     log INFO "readme.txt linked"
 else
-    log WARN "readme.txt not found in repo -- noemap -h will fail until present"
+    log WARN "readme.txt not found in repo -- nina -h will fail until present"
 fi
 
 # ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ for _cmd in awk sed grep cut ping ssh; do
     has "$_cmd" || _missing="$_missing $_cmd"
 done
 if ! has ip && ! has ifconfig; then _missing="$_missing ip/ifconfig"; fi
-[ -z "$_missing" ] || log WARN "MISSING hard deps:$_missing  noemap will not work"
+[ -z "$_missing" ] || log WARN "MISSING hard deps:$_missing  nina will not work"
 has nmap || {
     log WARN "nmap not found  attempting to install..."
 
@@ -232,7 +232,7 @@ has nmap || {
         if eval "$_nmap_cmd" 2>/dev/null; then
             log OK "nmap installed"
         else
-            fail "nmap install failed -- noemap requires nmap. Run manually: $_nmap_cmd"
+            fail "nmap install failed -- nina requires nmap. Run manually: $_nmap_cmd"
         fi
     else
         fail "nmap not found and no package manager detected. Install nmap manually and re-run."
@@ -277,7 +277,7 @@ case "${SHELL:-}" in
 esac
 log INFO "shell rc: $RC_FILE"
 
-MARKER="# >>> noemap"
+MARKER="# >>> nina"
 if grep -qF "$MARKER" "$RC_FILE" 2>/dev/null; then
     log INFO "rc already patched  skipping"
 else
@@ -288,7 +288,7 @@ $MARKER
 export NOEMAP_DATA="$DATADIR"
 alias nm='nina'
 alias nd='nina devices'
-# <<< noemap
+# <<< nina
 RC_BLOCK
     log OK "patched: $RC_FILE"
 fi
@@ -302,7 +302,7 @@ case ":$PATH:" in
         if [ -L "$RC_FILE" ]; then
             log WARN "$RC_FILE is a symlink (versioned dotfile)  add manually: export PATH=\"$BINDIR:\$PATH\""
         else
-            printf '\nexport PATH="%s:$PATH"  # noemap bindir\n' "$BINDIR" >> "$RC_FILE"
+            printf '\nexport PATH="%s:$PATH"  # nina bindir\n' "$BINDIR" >> "$RC_FILE"
             log OK "added $BINDIR to PATH in $RC_FILE"
         fi
         ;;
@@ -320,7 +320,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# SSH key bootstrap (noemap#15)
+# SSH key bootstrap (nina#15)
 #   1. Generate ~/.ssh/id_ed25519 (no passphrase) if missing -- required for
 #      non-interactive nssh between nodes. No passphrase by design: these keys
 #      are used by automation, an agent prompt would break the unattended flow.
@@ -342,7 +342,7 @@ ssh_key_bootstrap() {
     mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
     if [ ! -f "$_key" ]; then
         if has ssh-keygen; then
-            ssh-keygen -t ed25519 -N "" -f "$_key" -C "noemap@$(hostname 2>/dev/null || echo node)" >/dev/null 2>&1 \
+            ssh-keygen -t ed25519 -N "" -f "$_key" -C "nina@$(hostname 2>/dev/null || echo node)" >/dev/null 2>&1 \
                 && log OK "generated ssh key: $_key" \
                 || { log WARN "ssh-keygen failed -- skipping key bootstrap"; return 0; }
         else
@@ -450,7 +450,7 @@ else
 fi
 
 printf '\n'
-log OK "noemap installed  tools in $BINDIR, libs in $LIBDIR"
+log OK "nina installed  tools in $BINDIR, libs in $LIBDIR"
 printf '  Repo is now deletable; tools run standalone.\n'
 printf '  Run: nina   Devices: nina devices\n\n'
 

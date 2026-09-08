@@ -27,8 +27,8 @@ _bindir="$(cd "$(dirname "$_self")" && pwd -P)"
 _repo_base="${NOEMAP_BASE:-$(dirname "$_bindir")}"
 if [ -n "${NOEMAP_DATA:-}" ] && [ -d "${NOEMAP_DATA}/lib" ]; then
     DATA="$NOEMAP_DATA"
-elif [ -d "$HOME/.local/share/noemap/lib" ]; then
-    DATA="$HOME/.local/share/noemap"
+elif [ -d "$HOME/.local/share/nina/lib" ]; then
+    DATA="$HOME/.local/share/nina"
 else
     DATA="$_repo_base"
 fi
