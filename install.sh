@@ -286,8 +286,8 @@ else
 
 $MARKER
 export NOEMAP_DATA="$DATADIR"
-alias nm='noemap'
-alias nd='ndevs'
+alias nm='nina'
+alias nd='nina devices'
 # <<< noemap
 RC_BLOCK
     log OK "patched: $RC_FILE"
@@ -443,16 +443,16 @@ ssh_key_bootstrap
 # ---------------------------------------------------------------------------
 # Post-install verification: prove an installed tool resolves its libs.
 # ---------------------------------------------------------------------------
-if NOEMAP_DATA="$DATADIR" "$BINDIR/ndevs" >/dev/null 2>&1; then
-    log OK "post-install check passed (ndevs runs standalone)"
+if NOEMAP_DATA="$DATADIR" "$BINDIR/nina" status >/dev/null 2>&1; then
+    log OK "post-install check passed (nina runs standalone)"
 else
-    fail "post-install check FAILED  ndevs could not run from $BINDIR (libs at $LIBDIR?)"
+    fail "post-install check FAILED  nina could not run from $BINDIR (libs at $LIBDIR?)"
 fi
 
 printf '\n'
 log OK "noemap installed  tools in $BINDIR, libs in $LIBDIR"
 printf '  Repo is now deletable; tools run standalone.\n'
-printf '  Run: noemap   Devices: ndevs\n\n'
+printf '  Run: nina   Devices: nina devices\n\n'
 
 }
 
