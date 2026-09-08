@@ -109,6 +109,7 @@ _do_seed() {
 _do_fingerprint() {
     validate_env
     load_cache
+    detect_iface
     detect_network
     _require_prior_step discover "$_HOST_LIST_CACHE"
     _load_host_list_cache
