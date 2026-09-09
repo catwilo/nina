@@ -114,6 +114,22 @@ _validate_registered_hosts() {
         }
     ' "$DEVICES_DB" > "$_reg_aliases" 2>/dev/null
 
+    # Add ts-devices.db IPs (tailscale) to the validation set -- they are
+    # accepted directly (100.* no ping) and never marked stale.
+    if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
+        awk '
+            BEGIN { RS=""; FS="\n" }
+            {
+                for (i = 1; i <= NF; i++) {
+                    colon = index($i, ":")
+                    if (colon == 0) continue
+                    fk = substr($i, 1, colon - 1)
+                    if (fk == "ip") { print substr($i, colon + 2); break }
+                }
+            }
+        ' "$BASE/state/ts-devices.db" >> "$_reg_aliases" 2>/dev/null
+    fi
+
     _reg_tmp="$(session_tmp reg_ips)"
     : > "$_reg_tmp"
     while IFS= read -r _ralias; do
