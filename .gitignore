@@ -11,3 +11,5 @@ state/*.pid
 state/clip-dir.conf
 # mkit backups
 *.bak
+
+*.bak
