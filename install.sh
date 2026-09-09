@@ -397,6 +397,15 @@ ssh_key_bootstrap() {
             nssh "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
                 && log OK "key ensured on $_ka" \
                 || log WARN "key append to $_ka failed"
+
+            # Bidirectional: fetch remote's public key and add to LOCAL
+            # authorized_keys so the remote can reach us without password.
+            _remote_pub="$(nssh "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
+            if [ -n "$_remote_pub" ]; then
+                mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
+                grep -qxF "$_remote_pub" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_remote_pub" >> ~/.ssh/authorized_keys
+                log OK "remote key from $_ka installed locally"
+            fi
         else
             _need_manual="$_need_manual $_ka"
         fi
