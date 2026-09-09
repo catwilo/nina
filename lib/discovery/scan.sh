@@ -205,7 +205,7 @@ _remove_offline_host() {
 # if MY_IP is already present. Safe to call repeatedly (idempotent).
 # ---------------------------------------------------------------------------
 _registry_pull_latest() {
-    _rpl_dir="$HOME/.noemap-registry"
+    _rpl_dir="$HOME/.nina-registry"
     [ -d "$_rpl_dir/.git" ] || return 0
     ( cd "$_rpl_dir" && git pull --rebase origin main >/dev/null 2>&1 ) || true
 }
