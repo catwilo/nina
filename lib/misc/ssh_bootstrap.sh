@@ -64,6 +64,15 @@ ssh_key_bootstrap() {
             nssh "$_skb_a" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_skb_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_skb_pubdata' >> ~/.ssh/authorized_keys" >/dev/null 2>&1 \
                 && log OK "key ensured on $_skb_a" \
                 || log WARN "key append to $_skb_a failed"
+
+            # Bidirectional: fetch remote's public key and add to LOCAL
+            # authorized_keys so the remote can reach us without password.
+            _remote_pub="$(nssh "$_skb_a" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
+            if [ -n "$_remote_pub" ]; then
+                mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
+                grep -qxF "$_remote_pub" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_remote_pub" >> ~/.ssh/authorized_keys
+                log OK "remote key from $_skb_a installed locally"
+            fi
         else
             _skb_port="$(blockdb_field "$_skb_blk" port)"; _skb_port="${_skb_port:-8022}"
             _skb_target="u@${_skb_ip}"
