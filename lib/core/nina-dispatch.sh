@@ -80,6 +80,38 @@ _require_prior_step() {
 _do_discover() {
     validate_env
     load_cache
+
+    # Tailscale-first: if ts-devices.db has 100.* hosts, skip WLAN entirely.
+    if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
+        _my_nid="$(node_id 2>/dev/null || true)"
+        _ts_ips="$(awk -v mynid="$_my_nid" '
+            BEGIN { RS=""; FS="\n" }
+            /ip: 100\./ {
+                blk_nid=""
+                blk_ip=""
+                for (i=1;i<=NF;i++) {
+                    if ($i ~ /^ip:/) { sub(/^ip: /,"",$i); blk_ip=$i }
+                    if ($i ~ /^node_id:/) { sub(/^node_id: /,"",$i); blk_nid=$i }
+                }
+                if (blk_nid != mynid && blk_ip != "") print blk_ip
+            }
+        ' "$BASE/state/ts-devices.db" 2>/dev/null)"
+        if [ -n "$_ts_ips" ]; then
+            HOST_LIST="$_ts_ips"
+            _save_host_list_cache
+            log OK "discover: $(printf '%s\n' "$_ts_ips" | wc -l | tr -d ' ') tailscale host(s) -- WLAN skipped"
+            printf '%s\n' "$_ts_ips" | while IFS= read -r _tip; do
+                [ -n "$_tip" ] || continue
+                _tblk="$(blockdb_get "$BASE/state/ts-devices.db" ip "$_tip" 2>/dev/null || true)"
+                _talias="$(blockdb_field "$_tblk" alias 2>/dev/null || printf '?')"
+                _tplat="$(blockdb_field "$_tblk" platform 2>/dev/null || printf 'unknown')"
+                _tport="$(blockdb_field "$_tblk" port 2>/dev/null || printf '22')"
+                printf '  %-20s alias=%-10s platform=%-10s port=%s\n' "$_tip" "$_talias" "$_tplat" "$_tport"
+            done
+            return 0
+        fi
+    fi
+
     detect_iface
     detect_network
     discover_hosts

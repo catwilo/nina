@@ -476,8 +476,26 @@ discover_hosts() {
     _validated_tmp="$(session_tmp validated_hosts)"
 
     _SKIP_IPS=""
-    _self_register
-    _seed_from_registry
+    # Tailscale-first: if ts-devices.db has live 100.* hosts, use ONLY those.
+    # No WLAN scan, no nmap, no self-register churn. WLAN is fallback only.
+    if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
+        _ts_ips="$(awk '
+            BEGIN { RS=""; FS="\n" }
+            /^ip: 100\./ { for (i=1;i<=NF;i++) { if ($i ~ /^ip:/) { sub(/^ip: /,"",$i); print $i } } }
+        ' "$BASE/state/ts-devices.db" 2>/dev/null | grep -v "^$MY_IP$" || true)"
+        if [ -n "$_ts_ips" ]; then
+            HOST_LIST="$_ts_ips"
+            _save_host_list_cache
+            log INFO "tailscale: $(printf '%s\n' "$_ts_ips" | wc -l | tr -d ' ') host(s) -- skipping WLAN scan"
+            return 0
+        fi
+    fi
+
+    # WLAN fallback: only reached when tailscale table is empty/missing.
+    if [ ! -s "$DEVICES_DB" ] || ! blockdb_get "$DEVICES_DB" node_id "$(node_id)" >/dev/null 2>&1; then
+        _self_register
+        _seed_from_registry
+    fi
     _validate_registered_hosts "$_validated_tmp"
 
     if has_cmd nmap; then
