@@ -65,7 +65,8 @@ ssh_key_bootstrap() {
                 && log OK "key ensured on $_skb_a" \
                 || log WARN "key append to $_skb_a failed"
         else
-            _skb_target="u@${_skb_ip}:${_skb_port}"
+            _skb_port="$(blockdb_field "$_skb_blk" port)"; _skb_port="${_skb_port:-8022}"
+            _skb_target="u@${_skb_ip}"
             if has_cmd ssh-copy-id && ssh-copy-id -p "$_skb_port" -i "$_skb_pub" "$_skb_target" >/dev/null 2>&1; then
                 log OK "key installed on $_skb_a via ssh-copy-id"
                 continue
