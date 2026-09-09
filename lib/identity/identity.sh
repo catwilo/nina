@@ -147,6 +147,27 @@ _local_ips() {
     printf '127.0.0.1\n'
 }
 
+
+# detect_tailscale_ip -- print the 100.* IP from tun0 (or any tailscale iface),
+# or empty string if this node has no tailscale route. Reads live interface
+# state only; deterministic: no tun0 = empty.
+detect_tailscale_ip() {
+    _ts_ip=""
+    if command -v ifconfig >/dev/null 2>&1; then
+        _ts_ip="$(ifconfig 2>/dev/null | awk '
+            /^tun0:/ { in_tun=1; next }
+            in_tun && /inet / { print $2; exit }
+        ')"
+    fi
+    if [ -z "$_ts_ip" ] && command -v ip >/dev/null 2>&1; then
+        _ts_ip="$(ip -4 addr show tun0 2>/dev/null | awk '/inet /{split($2,a,"/");print a[1]}' | head -1)"
+    fi
+    case "$_ts_ip" in
+        100.*) printf '%s\n' "$_ts_ip" ;;
+        *) printf '' ;;
+    esac
+}
+
 # is_local_ip IP -- return 0 if IP belongs to this device (or is loopback).
 # _own_devices_ip -- the IP bound to THIS node's canonical alias in devices.db.
 # This is "me" by definition even if the interface that had it is now down
