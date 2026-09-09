@@ -214,8 +214,13 @@ _do_status() {
         done
     }
 
-    _print_devs "$BASE/state/ts-devices.db" "tailscale"
-    _print_devs "$BASE/state/devices.db" "wlan"
+    # Tailscale-first: show ONLY ts-devices.db. WLAN is fallback and must
+    # not appear unless tailscale table is empty.
+    if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
+        _print_devs "$BASE/state/ts-devices.db" "tailscale"
+    else
+        _print_devs "$BASE/state/devices.db" "wlan"
+    fi
 }
 
 _do_push() {
