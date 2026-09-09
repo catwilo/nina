@@ -189,6 +189,7 @@ _do_status() {
 _do_push() {
     validate_env
     load_cache
+    detect_iface
     detect_network
     sync_devices_to_nodes
 }
