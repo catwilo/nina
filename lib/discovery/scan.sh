@@ -214,6 +214,12 @@ _self_register() {
     [ -n "${MY_IP:-}" ] || return 0
     [ -f "$DEVICES_DB" ] || : > "$DEVICES_DB"
 
+    # Ensure sshd is running: without it this node cannot be reached by
+    # other nodes for sync/bootstrap. Start it if absent, never kill it.
+    if command -v sshd >/dev/null 2>&1 && ! pgrep -x sshd >/dev/null 2>&1; then
+        sshd >/dev/null 2>&1 && log OK "sshd started" || log WARN "sshd failed to start"
+    fi
+
     # Session-level idempotency guard (noemap#500): _self_register is called
     # twice per run (discover_hosts + sync_devices_to_nodes). Without this,
     # each call reaches _registry_write unconditionally, causing two full
