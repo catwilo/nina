@@ -161,7 +161,7 @@ _distribute_registry() {
             log WARN "registry -> $_na skipped (unreachable: $_nip:$_nport)"
             continue
         fi
-        _dr_remote_head="$(nssh "$_na" "cd ~/.noemap-registry 2>/dev/null && git pull --rebase origin main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null)"
+        _dr_remote_head="$(nssh "$_na" "cd ~/.nina-registry 2>/dev/null && git pull --rebase origin main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null)"
         if [ -z "$_dr_remote_head" ]; then
             log WARN "registry pull on $_na failed or repo not cloned -- skipped"
             printf 'x' >> "$_dr_fail_count"
@@ -180,10 +180,10 @@ _distribute_registry() {
             _dr_remote_hk="$([ -n "$_dr_remote_hk_blk" ] && blockdb_field "$_dr_remote_hk_blk" hostkey || printf '')"
             if [ -z "$_dr_remote_hk" ]; then
                 _dr_nuser="$(blockdb_field "$_nblk" user)"; _dr_nuser="${_dr_nuser:-u}"
-                if nssh "$_na" "command -v ndevs >/dev/null 2>&1 && ndevs --node-set '$_na' '$_dr_nuser' '$_nport'" >/dev/null 2>&1; then
+                if nssh "$_na" "command -v nina >/dev/null 2>&1 && nina devices node-set '$_na' '$_dr_nuser' '$_nport'" >/dev/null 2>&1; then
                     log OK "triggered remote hostkey registration on $_na"
                 else
-                    log WARN "could not trigger remote hostkey registration on $_na -- run 'ndevs --node-set $_na' there manually"
+                    log WARN "could not trigger remote hostkey registration on $_na -- run 'nina devices node-set $_na' there manually"
                 fi
             fi
         else
