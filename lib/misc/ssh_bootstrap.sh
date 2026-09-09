@@ -65,6 +65,11 @@ ssh_key_bootstrap() {
                 && log OK "key ensured on $_skb_a" \
                 || log WARN "key append to $_skb_a failed"
         else
+            _skb_target="u@${_skb_ip}:${_skb_port}"
+            if has_cmd ssh-copy-id && ssh-copy-id -p "$_skb_port" -i "$_skb_pub" "$_skb_target" >/dev/null 2>&1; then
+                log OK "key installed on $_skb_a via ssh-copy-id"
+                continue
+            fi
             _skb_need_manual="$_skb_need_manual $_skb_a"
         fi
     done <<EOF_SKB1
@@ -74,7 +79,7 @@ EOF_SKB1
     if [ -n "$_skb_need_manual" ]; then
         log WARN "nodes needing first-time key setup:$_skb_need_manual"
         for _skb_m in $_skb_need_manual; do
-            printf '    run once:  ssh-copy-id -i %s %s\n' "$_skb_pub" "$_skb_m"
+            printf '    run once:  ssh-copy-id -i %s u@%s:%s\n' "$_skb_pub" "$_skb_ip" "$_skb_port"
         done
     fi
 
