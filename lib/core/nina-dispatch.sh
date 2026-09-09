@@ -143,51 +143,47 @@ _do_bootstrap_keys() {
 _do_status() {
     validate_env
     load_cache
-    _db="$BASE/state/devices.db"
-    if [ ! -f "$_db" ]; then
-        printf '[INFO] no devices registered\n' >&2
-        return 0
-    fi
-    if [ ! -s "$_db" ]; then
-        printf '[INFO] no devices registered\n' >&2
-        return 0
-    fi
     _st_me="$(node_alias 2>/dev/null || printf '')"
-    _st_aliases="$(awk '
-        BEGIN { RS=""; FS="\n" }
-        {
-            for (i = 1; i <= NF; i++) {
-                colon = index($i, ":")
-                if (colon == 0) continue
-                fk = substr($i, 1, colon - 1)
-                if (fk == "alias") { print substr($i, colon + 2); break }
+
+    _print_devs() {
+        _db="$1"
+        _label="$2"
+        [ -f "$_db" ] && [ -s "$_db" ] || { printf '[INFO] no %s devices registered\n' "$_label" >&2; return 0; }
+        _aliases="$(awk '
+            BEGIN { RS=""; FS="\n" }
+            {
+                for (i = 1; i <= NF; i++) {
+                    colon = index($i, ":")
+                    if (colon == 0) continue
+                    fk = substr($i, 1, colon - 1)
+                    if (fk == "alias") { print substr($i, colon + 2); break }
+                }
             }
-        }
-    ' "$_db" 2>/dev/null)"
-    [ -n "$_st_aliases" ] || return 0
-    printf '%s\n' "$_st_aliases" | while IFS= read -r _sa; do
-        [ -n "$_sa" ] || continue
-        _sblk="$(blockdb_get "$_db" alias "$_sa")"
-        [ -n "$_sblk" ] || continue
-        _sip="$(blockdb_field "$_sblk" ip)"
-        _sip_ts="$(blockdb_field "$_sblk" ip_tailscale)"
-        [ -n "$_sip_ts" ] && _sip="$_sip_ts (lan: $_sip)"
-        _su="$(blockdb_field "$_sblk" user)"
-        _sp="$(blockdb_field "$_sblk" port)"
-        [ -n "$_sp" ] || _sp=22
-        _splat="$(blockdb_field "$_sblk" platform)"
-        [ -n "$_splat" ] || _splat="unknown"
-        _snid=""
-        if [ -f "$REGISTRY_DB" ]; then
-            _sreg_blk="$(blockdb_get "$REGISTRY_DB" alias "$_sa")"
-            [ -n "$_sreg_blk" ] && _snid="$(blockdb_field "$_sreg_blk" node_id)"
-        fi
-        if [ -n "$_st_me" ] && [ "$_sa" = "$_st_me" ]; then
-            printf 'alias=%s ip=%s user=%s port=%s platform=%s node_id=%s -- this is the local node (%s)\n' "$_sa" "$_sip" "$_su" "$_sp" "$_splat" "${_snid:-?}" "$_splat"
-        else
-            printf 'alias=%s ip=%s user=%s port=%s platform=%s node_id=%s\n' "$_sa" "$_sip" "$_su" "$_sp" "$_splat" "${_snid:-?}"
-        fi
-    done
+        ' "$_db" 2>/dev/null)"
+        [ -n "$_aliases" ] || return 0
+        printf '%s\n' "$_aliases" | while IFS= read -r _sa; do
+            [ -n "$_sa" ] || continue
+            _sblk="$(blockdb_get "$_db" alias "$_sa")"
+            [ -n "$_sblk" ] || continue
+            _sip="$(blockdb_field "$_sblk" ip)"
+            _su="$(blockdb_field "$_sblk" user)"
+            _sp="$(blockdb_field "$_sblk" port)"
+            [ -n "$_sp" ] || _sp=22
+            _splat="$(blockdb_field "$_sblk" platform)"
+            [ -n "$_splat" ] || _splat="unknown"
+            _snid=""
+            if [ -f "$REGISTRY_DB" ]; then
+                _sreg_blk="$(blockdb_get "$REGISTRY_DB" alias "$_sa")"
+                [ -n "$_sreg_blk" ] && _snid="$(blockdb_field "$_sreg_blk" node_id)"
+            fi
+            _marker=""
+            [ -n "$_st_me" ] && [ "$_sa" = "$_st_me" ] && _marker=" -- this is the local node ($_splat)"
+            printf '[%s] alias=%s ip=%s user=%s port=%s platform=%s node_id=%s%s\n' "$_label" "$_sa" "$_sip" "$_su" "$_sp" "$_splat" "${_snid:-?}" "$_marker"
+        done
+    }
+
+    _print_devs "$BASE/state/ts-devices.db" "tailscale"
+    _print_devs "$BASE/state/devices.db" "wlan"
 }
 
 _do_push() {
