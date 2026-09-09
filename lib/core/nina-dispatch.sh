@@ -233,7 +233,7 @@ _clip_get() {
     esac
     _alias="${_target%%:*}"
     _remote_path="${_target#*:}"
-    _row="$(resolve_device "$_alias" "$DB")"
+    _row="$(resolve_device "$_alias" "$BASE/state")"
     _ip="$(printf '%s\n'   "$_row" | cut -d'|' -f1)"
     _user="$(printf '%s\n' "$_row" | cut -d'|' -f2)"
     _port="$(printf '%s\n' "$_row" | cut -d'|' -f3)"
@@ -275,7 +275,7 @@ _clip_send() {
         '')    printf 'usage: <cmd> | nina clip send [--ssh] <alias>\n' >&2; exit 1 ;;
     esac
     [ -n "$_alias" ] || { printf 'usage: <cmd> | nina clip send [--ssh] <alias>\n' >&2; exit 1; }
-    _row="$(resolve_device "$_alias" "$DB")"
+    _row="$(resolve_device "$_alias" "$BASE/state")"
     _ip="$(printf '%s\n'   "$_row" | cut -d'|' -f1)"
     _user="$(printf '%s\n' "$_row" | cut -d'|' -f2)"
     _port="$(printf '%s\n' "$_row" | cut -d'|' -f3)"
@@ -333,8 +333,8 @@ _clip_set() {
     _src="$1"; _dst="$2"
     [ "$_src" != "$_dst" ] || { log ERROR "src and dst must differ (got: $_src)"; exit 1; }
     CONF="$BASE/state/clip-dir.conf"
-    resolve_device "$_src" "$DB" >/dev/null
-    resolve_device "$_dst" "$DB" >/dev/null
+    resolve_device "$_src" "$BASE/state" >/dev/null
+    resolve_device "$_dst" "$BASE/state" >/dev/null
     mkdir -p "$(dirname "$CONF")"
     _tmp_conf="$(mktemp "${TMPDIR:-/tmp}/clip-dir.XXXXXX")"
     {

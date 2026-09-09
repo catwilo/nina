@@ -18,38 +18,37 @@
 # it only ever comes from local devices.db.
 
 # resolve_device alias db_path — prints "IP|USER|PORT" or exits on error.
+# NEW (2026-09-08): consults ts-devices.db FIRST (tailscale priority), then
+# falls back to devices.db (WLAN). Both tables use the same blockdb format.
+# The caller passes $BASE/state as dir; this function picks the right table.
 resolve_device() {
     _alias="$1"
-    _db="$2"
+    _db_dir="$2"
 
-    [ -f "$_db" ] || {
-        log ERROR "devices database missing: $_db"
-        exit 1
-    }
+    _ts_db="$_db_dir/ts-devices.db"
+    _wlan_db="$_db_dir/devices.db"
 
-    _blk="$(blockdb_get "$_db" alias "$_alias")"
+    _blk=""
+    _used_db=""
+    if [ -f "$_ts_db" ]; then
+        _blk="$(blockdb_get "$_ts_db" alias "$_alias" 2>/dev/null || true)"
+        [ -n "$_blk" ] && _used_db="$_ts_db"
+    fi
+    if [ -z "$_blk" ] && [ -f "$_wlan_db" ]; then
+        _blk="$(blockdb_get "$_wlan_db" alias "$_alias" 2>/dev/null || true)"
+        [ -n "$_blk" ] && _used_db="$_wlan_db"
+    fi
 
     [ -n "$_blk" ] || {
-        log ERROR "unknown device alias: '$_alias'"
+        log ERROR "unknown device alias: '$_alias' (checked ts-devices.db and devices.db)"
         exit 1
     }
 
     _ip="$(blockdb_field "$_blk" ip)"
-    _ip_tailscale="$(blockdb_field "$_blk" ip_tailscale)"
     _user="$(blockdb_field "$_blk" user)"
     _port="$(blockdb_field "$_blk" port)"
 
-    [ -n "$_ip" ] || { log ERROR "devices.db: empty IP for '$_alias'"; exit 1; }
-
-    # Tailscale priority: if this node HAS a 100.* route locally AND the
-    # target has a tailscale IP registered, use 100.* first. Fallback to LAN
-    # is handled by the caller (nssh/nscp/clip) on connection timeout.
-    if [ -n "$_ip_tailscale" ] && command -v detect_tailscale_ip >/dev/null 2>&1; then
-        _local_ts="$(detect_tailscale_ip 2>/dev/null || true)"
-        if [ -n "$_local_ts" ]; then
-            _ip="$_ip_tailscale"
-        fi
-    fi
+    [ -n "$_ip" ] || { log ERROR "empty IP for '$_alias' in $_used_db"; exit 1; }
 
     if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_ip"; then
         log ERROR "refusing self-targeted handshake: '$_alias' resolves to this node's own IP ($_ip)"

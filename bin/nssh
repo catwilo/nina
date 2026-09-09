@@ -55,7 +55,7 @@ esac
 _name="$1"
 shift
 
-_row="$(resolve_device "$_name" "$DB")"
+_row="$(resolve_device "$_name" "$BASE/state")"
 _ip="$(printf '%s\n'   "$_row" | cut -d'|' -f1)"
 _user="$(printf '%s\n' "$_row" | cut -d'|' -f2)"
 _port="$(printf '%s\n' "$_row" | cut -d'|' -f3)"
