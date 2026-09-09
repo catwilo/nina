@@ -281,8 +281,12 @@ _self_register() {
         blockdb_remove "$DEVICES_DB" ip "$MY_IP"
     fi
 
-    _self_block="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n' \
-        "$_self_alias" "$MY_IP" "$_self_user" "$_self_port" "$_self_platform" "${_self_prev_hk:-}" "$(node_id)")"
+    _self_tailscale_ip=""
+    if command -v detect_tailscale_ip >/dev/null 2>&1; then
+        _self_tailscale_ip="$(detect_tailscale_ip 2>/dev/null || true)"
+    fi
+    _self_block="$(printf 'alias: %s\nip: %s\nip_tailscale: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n' \
+        "$_self_alias" "$MY_IP" "${_self_tailscale_ip:-}" "$_self_user" "$_self_port" "$_self_platform" "${_self_prev_hk:-}" "$(node_id)")"
     blockdb_upsert "$DEVICES_DB" alias "$_self_alias" "$_self_block"
     log OK "self-registered $_self_alias ($MY_IP) platform=$_self_platform in devices.db"
     if command -v node_alias_set >/dev/null 2>&1; then

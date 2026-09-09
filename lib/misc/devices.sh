@@ -35,10 +35,21 @@ resolve_device() {
     }
 
     _ip="$(blockdb_field "$_blk" ip)"
+    _ip_tailscale="$(blockdb_field "$_blk" ip_tailscale)"
     _user="$(blockdb_field "$_blk" user)"
     _port="$(blockdb_field "$_blk" port)"
 
     [ -n "$_ip" ] || { log ERROR "devices.db: empty IP for '$_alias'"; exit 1; }
+
+    # Tailscale priority: if this node HAS a 100.* route locally AND the
+    # target has a tailscale IP registered, use 100.* first. Fallback to LAN
+    # is handled by the caller (nssh/nscp/clip) on connection timeout.
+    if [ -n "$_ip_tailscale" ] && command -v detect_tailscale_ip >/dev/null 2>&1; then
+        _local_ts="$(detect_tailscale_ip 2>/dev/null || true)"
+        if [ -n "$_local_ts" ]; then
+            _ip="$_ip_tailscale"
+        fi
+    fi
 
     if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_ip"; then
         log ERROR "refusing self-targeted handshake: '$_alias' resolves to this node's own IP ($_ip)"

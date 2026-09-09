@@ -170,6 +170,8 @@ _do_status() {
         _sblk="$(blockdb_get "$_db" alias "$_sa")"
         [ -n "$_sblk" ] || continue
         _sip="$(blockdb_field "$_sblk" ip)"
+        _sip_ts="$(blockdb_field "$_sblk" ip_tailscale)"
+        [ -n "$_sip_ts" ] && _sip="$_sip_ts (lan: $_sip)"
         _su="$(blockdb_field "$_sblk" user)"
         _sp="$(blockdb_field "$_sblk" port)"
         [ -n "$_sp" ] || _sp=22
@@ -656,6 +658,8 @@ _devices_list() {
         _blk="$(blockdb_get "$_db" alias "$_alias")"
         [ -n "$_blk" ] || continue
         _ip="$(blockdb_field "$_blk" ip)"
+        _ip_ts="$(blockdb_field "$_blk" ip_tailscale)"
+        [ -n "$_ip_ts" ] && _ip="$_ip_ts (lan: $_ip)"
         _user="$(blockdb_field "$_blk" user)"
         _port="$(blockdb_field "$_blk" port)"
         [ -n "$_port" ] || _port=22
