@@ -329,7 +329,7 @@ sync_devices_to_nodes() {
     [ -f "$DEVICES_DB" ] && [ -s "$DEVICES_DB" ] || return 0
     has_cmd nssh || { log WARN "nssh not found -- skipping device sync"; return 0; }
 
-    _remote_db="$HOME/.local/share/noemap/state/devices.db"
+    _remote_db="$HOME/.local/share/nina/state/devices.db"
     _sdn_aliases="$(session_tmp sdn_aliases)"
     awk '
         BEGIN { RS=""; FS="\n" }
@@ -357,10 +357,17 @@ sync_devices_to_nodes() {
         [ -n "$_sa" ] || continue
         [ "$_sip" = "${MY_IP:-}" ] && continue   # never push to self
         if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_sip"; then continue; fi
-        if nssh "$_sa" "mkdir -p ~/.local/share/noemap/state && cat > ~/.local/share/noemap/state/devices.db" < "$DEVICES_DB"; then
+        if nssh "$_sa" "mkdir -p ~/.local/share/nina/state && cat > ~/.local/share/nina/state/devices.db" < "$DEVICES_DB"; then
             log OK "synced devices.db -> $_sa"
         else
             log WARN "sync to $_sa failed (node down?) -- skipped"
+        fi
+        if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
+            if nssh "$_sa" "mkdir -p ~/.local/share/nina/state && cat > ~/.local/share/nina/state/ts-devices.db" < "$BASE/state/ts-devices.db"; then
+                log OK "synced ts-devices.db -> $_sa"
+            else
+                log WARN "ts sync to $_sa failed -- skipped"
+            fi
         fi
     done 3< "$_sdn_tmp"
 }
