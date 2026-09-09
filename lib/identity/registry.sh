@@ -178,13 +178,15 @@ _distribute_registry() {
             # on the remote side is idempotent (no-op if already current).
             _dr_remote_hk_blk="$(blockdb_get "$REGISTRY_DB" alias "$_na")"
             _dr_remote_hk="$([ -n "$_dr_remote_hk_blk" ] && blockdb_field "$_dr_remote_hk_blk" hostkey || printf '')"
-            if [ -z "$_dr_remote_hk" ]; then
-                _dr_nuser="$(blockdb_field "$_nblk" user)"; _dr_nuser="${_dr_nuser:-u}"
-                if nssh "$_na" "command -v nina >/dev/null 2>&1 && nina devices node-set '$_na' '$_dr_nuser' '$_nport'" >/dev/null 2>&1; then
-                    log OK "triggered remote hostkey registration on $_na"
-                else
-                    log WARN "could not trigger remote hostkey registration on $_na -- run 'nina devices node-set $_na' there manually"
-                fi
+            # Always trigger remote node-set so the remote registry.db is
+            # rewritten from the CURRENT local registry (fixes inverted
+            # node_id mappings on nodes whose clone was stale). Idempotent.
+            _dr_nuser="$(blockdb_field "$_nblk" user)"; _dr_nuser="${_dr_nuser:-u}"
+            _dr_nplat="$(blockdb_field "$_nblk" platform)"; _dr_nplat="${_dr_nplat:-android}"
+            if nssh "$_na" "command -v nina >/dev/null 2>&1 && nina devices node-set '$_na' '$_dr_nuser' '$_nport' '$_dr_nplat'" >/dev/null 2>&1; then
+                log OK "triggered remote node-set on $_na"
+            else
+                log WARN "could not trigger remote node-set on $_na -- run 'nina devices node-set $_na' there manually"
             fi
         else
             log WARN "registry synced -> $_na (DIFF: local=${_dr_local_head:-?} remote=$_dr_remote_head)"

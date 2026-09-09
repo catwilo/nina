@@ -13,7 +13,7 @@
 # The seed is never transmitted raw: node_id() emits SHA-256 truncated to 16
 # hex chars (follows systemd guidance against leaking machine-id directly).
 #
-# Master registry ($HOME/.noemap-registry/registry.db) maps
+# Master registry ($HOME/.nina-registry/registry.db) maps
 # node-id -> canonical alias:
 #   NODE_ID|ALIAS|USER|PORT
 # It is the source of truth for "who is this device", independent of IP.
@@ -36,7 +36,7 @@ _identity_statedir() {
 
 # _identity_registry_default -- default path for the git-backed registry repo.
 _identity_registry_default() {
-    printf '%s\n' "$HOME/.noemap-registry/registry.db"
+    printf '%s\n' "$HOME/.nina-registry/registry.db"
 }
 
 REGISTRY_DB="${REGISTRY_DB:-$(_identity_registry_default)}"
@@ -86,9 +86,9 @@ _IDENTITY_REGISTRY_WARNED="${_IDENTITY_REGISTRY_WARNED:-0}"
 _identity_registry_warn_once() {
     [ "$_IDENTITY_REGISTRY_WARNED" = "1" ] && return 0
     [ "$REGISTRY_DB" = "$(_identity_registry_default)" ] || return 0
-    [ -d "$HOME/.noemap-registry/.git" ] && return 0
-    printf '[WARN] registry repo not found at %s -- clone it: git clone git@github.com:catwilo/noemap-registry.git %s\n' \
-        "$HOME/.noemap-registry" "$HOME/.noemap-registry" >&2
+    [ -d "$HOME/.nina-registry/.git" ] && return 0
+    printf '[WARN] registry repo not found at %s -- clone it: git clone git@github.com:catwilo/nina-registry.git %s\n' \
+        "$HOME/.nina-registry" "$HOME/.nina-registry" >&2
     _IDENTITY_REGISTRY_WARNED=1
 }
 
