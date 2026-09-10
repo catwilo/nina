@@ -168,6 +168,32 @@ detect_tailscale_ip() {
     esac
 }
 
+# _tailscale_active -- returns 0 if this node has a live tailscale IP AND at
+# least one peer with a 100.* IP in ts-devices.db. Returns 1 otherwise.
+# Used to enforce tailscale-first: when active, all discovery flows must use
+# ONLY tailscale and never touch WLAN. When inactive, callers must log the
+# fallback explicitly (WLAN scan) before running interface detection.
+_tailscale_active() {
+    _tsa_ip="$(detect_tailscale_ip 2>/dev/null || true)"
+    [ -n "$_tsa_ip" ] || return 1
+    _tsa_db="${BASE:-}/state/ts-devices.db"
+    [ -f "$_tsa_db" ] && [ -s "$_tsa_db" ] || return 1
+    _tsa_own_nid="$(node_id 2>/dev/null || true)"
+    _tsa_peer_count="$(awk -v mynid="$_tsa_own_nid" '
+        BEGIN { RS=""; FS="\n"; n=0 }
+        /ip: 100\./ {
+            blk_nid=""; blk_ip=""
+            for (i=1;i<=NF;i++) {
+                if ($i ~ /^ip:/)      { sub(/^ip: /,"",$i); blk_ip=$i }
+                if ($i ~ /^node_id:/) { sub(/^node_id: /,"",$i); blk_nid=$i }
+            }
+            if (blk_nid != mynid && blk_ip != "") n++
+        }
+        END { print n+0 }
+    ' "$_tsa_db" 2>/dev/null)"
+    [ "${_tsa_peer_count:-0}" -gt 0 ]
+}
+
 # is_local_ip IP -- return 0 if IP belongs to this device (or is loopback).
 # _own_devices_ip -- the IP bound to THIS node's canonical alias in devices.db.
 # This is "me" by definition even if the interface that had it is now down

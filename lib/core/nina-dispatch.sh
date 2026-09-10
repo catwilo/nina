@@ -112,8 +112,16 @@ _do_discover() {
         fi
     fi
 
-    detect_iface
-    detect_network
+    if _tailscale_active; then
+        MY_IP="$(detect_tailscale_ip 2>/dev/null || true)"
+        SUBNET=""
+        PRIMARY_IFACE="tailscale"
+        log INFO "tailscale active -- using tailscale-only path"
+    else
+        log WARN "tailscale unavailable -- falling back to WLAN"
+        detect_iface
+        detect_network
+    fi
     discover_hosts
     _save_host_list_cache
     _save_stale_candidates_cache
@@ -127,8 +135,16 @@ _do_discover() {
 _do_self_register() {
     validate_env
     load_cache
-    detect_iface
-    detect_network
+    if _tailscale_active; then
+        MY_IP="$(detect_tailscale_ip 2>/dev/null || true)"
+        SUBNET=""
+        PRIMARY_IFACE="tailscale"
+        log INFO "tailscale active -- self-register without WLAN detection"
+    else
+        log WARN "tailscale unavailable -- falling back to WLAN"
+        detect_iface
+        detect_network
+    fi
     _self_register
 }
 
@@ -141,8 +157,16 @@ _do_seed() {
 _do_fingerprint() {
     validate_env
     load_cache
-    detect_iface
-    detect_network
+    if _tailscale_active; then
+        MY_IP="$(detect_tailscale_ip 2>/dev/null || true)"
+        SUBNET=""
+        PRIMARY_IFACE="tailscale"
+        log INFO "tailscale active -- using tailscale-only path"
+    else
+        log WARN "tailscale unavailable -- falling back to WLAN"
+        detect_iface
+        detect_network
+    fi
     _require_prior_step discover "$_HOST_LIST_CACHE"
     _load_host_list_cache
     _load_stale_candidates_cache
@@ -226,16 +250,32 @@ _do_status() {
 _do_push() {
     validate_env
     load_cache
-    detect_iface
-    detect_network
+    if _tailscale_active; then
+        MY_IP="$(detect_tailscale_ip 2>/dev/null || true)"
+        SUBNET=""
+        PRIMARY_IFACE="tailscale"
+        log INFO "tailscale active -- using tailscale-only path"
+    else
+        log WARN "tailscale unavailable -- falling back to WLAN"
+        detect_iface
+        detect_network
+    fi
     sync_devices_to_nodes
 }
 
 _do_all() {
     validate_env
     load_cache
-    detect_iface
-    detect_network
+    if _tailscale_active; then
+        MY_IP="$(detect_tailscale_ip 2>/dev/null || true)"
+        SUBNET=""
+        PRIMARY_IFACE="tailscale"
+        log INFO "tailscale active -- using tailscale-only path"
+    else
+        log WARN "tailscale unavailable -- falling back to WLAN"
+        detect_iface
+        detect_network
+    fi
     discover_hosts
     [ -n "${HOST_LIST:-}" ] || {
         log WARN "no hosts found -- nothing to fingerprint"

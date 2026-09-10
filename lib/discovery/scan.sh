@@ -303,23 +303,41 @@ _self_register() {
         blockdb_remove "$DEVICES_DB" ip "$MY_IP"
     fi
 
+    # Tailscale-first self-registration: when a tailscale IP exists, this
+    # node's canonical row goes ONLY into ts-devices.db and any stale WLAN
+    # row for this alias is removed from devices.db. WLAN devices.db is
+    # touched only in the tailscale-absent fallback, so the local LAN IP
+    # is never self-registered while tailscale is active.
     _self_tailscale_ip=""
     if command -v detect_tailscale_ip >/dev/null 2>&1; then
         _self_tailscale_ip="$(detect_tailscale_ip 2>/dev/null || true)"
     fi
-    _self_block_wlan="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n' \
-        "$_self_alias" "$MY_IP" "$_self_user" "$_self_port" "$_self_platform" "${_self_prev_hk:-}" "$(node_id)")"
-    blockdb_upsert "$DEVICES_DB" alias "$_self_alias" "$_self_block_wlan"
-    log OK "self-registered $_self_alias ($MY_IP) platform=$_self_platform in devices.db"
 
-    # Tailscale table: separate ts-devices.db, write only if tailscale IP exists.
     if [ -n "$_self_tailscale_ip" ]; then
+        # Drop any stale WLAN row for this alias (its IP may have changed).
+        _self_stale_wlan_blk="$(blockdb_get "$DEVICES_DB" alias "$_self_alias")"
+        if [ -n "$_self_stale_wlan_blk" ]; then
+            _self_stale_wlan_ip="$(blockdb_field "$_self_stale_wlan_blk" ip)"
+            case "$_self_stale_wlan_ip" in
+                100.*) ;;  # already ts-shaped, leave it
+                *) blockdb_remove "$DEVICES_DB" alias "$_self_alias"
+                   log INFO "removed stale WLAN row for $_self_alias from devices.db (tailscale active)" ;;
+            esac
+        fi
+
         _ts_db="$BASE/state/ts-devices.db"
         [ -f "$_ts_db" ] || : > "$_ts_db"
         _self_block_ts="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n' \
             "$_self_alias" "$_self_tailscale_ip" "$_self_user" "$_self_port" "$_self_platform" "${_self_prev_hk:-}" "$(node_id)")"
         blockdb_upsert "$_ts_db" alias "$_self_alias" "$_self_block_ts"
-        log OK "self-registered $_self_alias ($_self_tailscale_ip) in ts-devices.db"
+        log OK "self-registered $_self_alias ($_self_tailscale_ip) in ts-devices.db (tailscale-first)"
+    else
+        # Tailscale-absent fallback: WLAN row in devices.db, explicit in output.
+        log WARN "tailscale unavailable -- self-registering via WLAN in devices.db"
+        _self_block_wlan="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n' \
+            "$_self_alias" "$MY_IP" "$_self_user" "$_self_port" "$_self_platform" "${_self_prev_hk:-}" "$(node_id)")"
+        blockdb_upsert "$DEVICES_DB" alias "$_self_alias" "$_self_block_wlan"
+        log OK "self-registered $_self_alias ($MY_IP) platform=$_self_platform in devices.db"
     fi
     if command -v node_alias_set >/dev/null 2>&1; then
         node_alias_set "$_self_alias" "$_self_user" "$_self_port" "$_self_platform" || \
