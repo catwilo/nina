@@ -491,6 +491,50 @@ _seed_from_registry() {
 # ---------------------------------------------------------------------------
 # discover_hosts — main entry point. Sets HOST_LIST.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# _purge_wlan_rows_when_tailscale_active -- when tailscale is up, every row
+# in devices.db whose IP is NOT 100.* is stale WLAN residue. Remove them so
+# the database only reflects tailscale-reachable peers. No-op when tailscale
+# is inactive (WLAN fallback keeps devices.db as the source of truth).
+# ---------------------------------------------------------------------------
+_purge_wlan_rows_when_tailscale_active() {
+    _pwta_active="$(detect_tailscale_ip 2>/dev/null || true)"
+    [ -n "$_pwta_active" ] || return 0
+    [ -f "$DEVICES_DB" ] && [ -s "$DEVICES_DB" ] || return 0
+
+    _pwta_aliases="$(session_tmp purge_aliases)"
+    awk '
+        BEGIN { RS=""; FS="\n" }
+        {
+            for (i = 1; i <= NF; i++) {
+                colon = index($i, ":")
+                if (colon == 0) continue
+                fk = substr($i, 1, colon - 1)
+                if (fk == "alias") { print substr($i, colon + 2); break }
+            }
+        }
+    ' "$DEVICES_DB" > "$_pwta_aliases" 2>/dev/null
+
+    _pwta_count=0
+    while IFS= read -r _pwta_alias; do
+        [ -n "$_pwta_alias" ] || continue
+        _pwta_blk="$(blockdb_get "$DEVICES_DB" alias "$_pwta_alias")"
+        [ -n "$_pwta_blk" ] || continue
+        _pwta_ip="$(blockdb_field "$_pwta_blk" ip)"
+        [ -n "$_pwta_ip" ] || continue
+        case "$_pwta_ip" in
+            100.*) continue ;;
+        esac
+        blockdb_remove "$DEVICES_DB" alias "$_pwta_alias"
+        log INFO "purged WLAN row '$_pwta_alias' ($_pwta_ip) from devices.db (tailscale active)"
+        _pwta_count=$(( _pwta_count + 1 ))
+    done < "$_pwta_aliases"
+
+    [ "$_pwta_count" -gt 0 ] && \
+        log OK "tailscale active -- purged $_pwta_count WLAN-only row(s) from devices.db"
+    return 0
+}
+
 discover_hosts() {
     log INFO "discovering hosts on $SUBNET"
 
@@ -501,13 +545,16 @@ discover_hosts() {
 
     _SKIP_IPS=""
     # Tailscale-first: if ts-devices.db has live 100.* hosts, use ONLY those.
-    # No WLAN scan, no nmap, no self-register churn. WLAN is fallback only.
+    # No WLAN scan, no nmap. WLAN is fallback only. When this branch is
+    # taken we purge every WLAN-only row from devices.db so the base stays
+    # clean while tailscale works.
     if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
         _ts_ips="$(awk '
             BEGIN { RS=""; FS="\n" }
             /^ip: 100\./ { for (i=1;i<=NF;i++) { if ($i ~ /^ip:/) { sub(/^ip: /,"",$i); print $i } } }
         ' "$BASE/state/ts-devices.db" 2>/dev/null | grep -v "^$MY_IP$" || true)"
         if [ -n "$_ts_ips" ]; then
+            _purge_wlan_rows_when_tailscale_active
             HOST_LIST="$_ts_ips"
             _save_host_list_cache
             log INFO "tailscale: $(printf '%s\n' "$_ts_ips" | wc -l | tr -d ' ') host(s) -- skipping WLAN scan"
