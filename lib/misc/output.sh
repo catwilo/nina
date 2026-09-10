@@ -56,6 +56,12 @@ render_active_hosts() {
             _alias_blk="$(blockdb_get "$_devdb" ip "$_ip")"
             [ -n "$_alias_blk" ] && _alias="$(blockdb_field "$_alias_blk" alias)"
         fi
+        # Tailscale-first: when devices.db was purged of WLAN rows, the alias
+        # for a 100.* host lives only in ts-devices.db. Fall back to it.
+        if [ -z "$_alias" ] && [ -f "$BASE/state/ts-devices.db" ]; then
+            _alias_ts_blk="$(blockdb_get "$BASE/state/ts-devices.db" ip "$_ip")"
+            [ -n "$_alias_ts_blk" ] && _alias="$(blockdb_field "$_alias_ts_blk" alias)"
+        fi
         _port_disp="${_ssh_port:-?}"
         [ "$_port_disp" = "0" ] && _port_disp="-"
         printf "  ${_C_GREEN}%-16s${_C_RESET}  %-14s  %-10s  %-6s  %s\n" \
