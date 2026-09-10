@@ -18,9 +18,16 @@
 # it only ever comes from local devices.db.
 
 # resolve_device alias db_path — prints "IP|USER|PORT" or exits on error.
-# NEW (2026-09-08): consults ts-devices.db FIRST (tailscale priority), then
-# falls back to devices.db (WLAN). Both tables use the same blockdb format.
-# The caller passes $BASE/state as dir; this function picks the right table.
+#
+# Tailscale-first policy: ts-devices.db wins whenever it has a row for the
+# alias, and its IP always takes precedence over the WLAN row. The WLAN row
+# is only consulted when ts-devices.db has no entry. Both tables share the
+# blockdb format.
+#
+# Port policy: the port comes from the authoritative registry row for this
+# alias when available (cloud source of truth, devices.db fallback). Local
+# table's port is used only if the registry has none. Platform is read from
+# the same source for consistency.
 resolve_device() {
     _alias="$1"
     _db_dir="$2"
@@ -55,17 +62,55 @@ resolve_device() {
         exit 1
     fi
 
+    # Registry is the authoritative source for port and user. Never let the
+    # local heuristic (port scan / cached values) override a real registry
+    # row: phones on Termux use 8022 and must stay 8022 even if a scan sees
+    # 22 on a nearby host by mistake.
     if command -v registry_row_by_alias >/dev/null 2>&1; then
         _cloud_blk="$(registry_row_by_alias "$_alias")"
         if [ -n "$_cloud_blk" ]; then
             _cloud_port="$(blockdb_field "$_cloud_blk" port)"
+            _cloud_user="$(blockdb_field "$_cloud_blk" user)"
             [ -n "$_cloud_port" ] && _port="$_cloud_port"
+            [ -n "$_cloud_user" ] && _user="$_cloud_user"
         fi
     fi
     [ -n "$_port" ] || _port=22
 
-    printf '%s|%s|%s\n' "$_ip" "${_user:-}" "$_port"
+    printf '%s|%s|%s
+' "$_ip" "${_user:-}" "$_port"
 }
+
+# resolve_device_platform alias db_path — prints the platform string for the
+# alias, preferring registry, then ts-devices.db, then devices.db. Empty if
+# unknown everywhere. Used by callers that must not lose the previously
+# known platform when a device is re-read from a table that lacks it.
+resolve_device_platform() {
+    _rdp_alias="$1"
+    _rdp_dir="$2"
+
+    if command -v registry_row_by_alias >/dev/null 2>&1; then
+        _rdp_blk="$(registry_row_by_alias "$_rdp_alias")"
+        if [ -n "$_rdp_blk" ]; then
+            _rdp_plat="$(blockdb_field "$_rdp_blk" platform)"
+            [ -n "$_rdp_plat" ] && { printf '%s
+' "$_rdp_plat"; return 0; }
+        fi
+    fi
+
+    for _rdp_db in "$_rdp_dir/ts-devices.db" "$_rdp_dir/devices.db"; do
+        [ -f "$_rdp_db" ] || continue
+        _rdp_blk="$(blockdb_get "$_rdp_db" alias "$_rdp_alias" 2>/dev/null || true)"
+        [ -n "$_rdp_blk" ] || continue
+        _rdp_plat="$(blockdb_field "$_rdp_blk" platform)"
+        [ -n "$_rdp_plat" ] && { printf '%s
+' "$_rdp_plat"; return 0; }
+    done
+
+    printf '
+'
+}
+
 
 # ---------------------------------------------------------------------------
 # _ensure_user alias db_path current_user

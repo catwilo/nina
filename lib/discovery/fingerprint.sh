@@ -204,6 +204,44 @@ fingerprint_hosts() {
 
         _ssh_port="$(_detect_ssh_port "$_ip" "$_fp_nmap_out")"
 
+        # Registry port override: if the IP already maps to a known alias in
+        # devices.db (or ts-devices.db), consult the registry row for that
+        # alias and use its port. Termux/Android always answer on 8022; a
+        # probe that sees 22 elsewhere must not demote an established node.
+        _existing_alias=""
+        _existing_blk="$(blockdb_get "$DEVICES_DB" ip "$_ip" 2>/dev/null || true)"
+        [ -n "$_existing_blk" ] && _existing_alias="$(blockdb_field "$_existing_blk" alias)"
+        if [ -z "$_existing_alias" ] && [ -f "$BASE/state/ts-devices.db" ]; then
+            _existing_blk="$(blockdb_get "$BASE/state/ts-devices.db" ip "$_ip" 2>/dev/null || true)"
+            [ -n "$_existing_blk" ] && _existing_alias="$(blockdb_field "$_existing_blk" alias)"
+        fi
+        if [ -z "$_existing_alias" ]; then
+            _hk_pre="$(_get_host_key_fingerprint "$_ip" "${_ssh_port:-22}" 2>/dev/null)"
+            if [ -n "$_hk_pre" ] && command -v registry_row_by_hostkey >/dev/null 2>&1; then
+                _reg_by_hk="$(registry_row_by_hostkey "$_hk_pre" 2>/dev/null || true)"
+                [ -n "$_reg_by_hk" ] && _existing_alias="$(blockdb_field "$_reg_by_hk" alias)"
+            fi
+        fi
+        if [ -n "$_existing_alias" ] && command -v registry_row_by_alias >/dev/null 2>&1; then
+            _reg_blk="$(registry_row_by_alias "$_existing_alias" 2>/dev/null || true)"
+            if [ -n "$_reg_blk" ]; then
+                _reg_port="$(blockdb_field "$_reg_blk" port)"
+                [ -n "$_reg_port" ] && _ssh_port="$_reg_port"
+            fi
+        fi
+
+        # Tailscale IP substitution: if this alias has a 100.* row in
+        # ts-devices.db, always report the tailscale IP for display/storage
+        # instead of the WLAN IP. Tailscale-first is the network policy.
+        _display_ip="$_ip"
+        if [ -n "$_existing_alias" ] && [ -f "$BASE/state/ts-devices.db" ]; then
+            _ts_blk="$(blockdb_get "$BASE/state/ts-devices.db" alias "$_existing_alias" 2>/dev/null || true)"
+            if [ -n "$_ts_blk" ]; then
+                _ts_ip="$(blockdb_field "$_ts_blk" ip)"
+                case "$_ts_ip" in 100.*) _display_ip="$_ts_ip" ;; esac
+            fi
+        fi
+
         # All open ports (for display in --ports mode)
         _all_ports=""
         if [ -s "$_fp_nmap_out" ]; then
@@ -215,13 +253,71 @@ fingerprint_hosts() {
             ' "$_fp_nmap_out" | sed 's/,$//')"
         fi
 
-        _type="$(_detect_type "${_ttl:-}" "$_ssh_port" "$_ip")"
+        # Prefer the authoritative platform from the registry / local tables
+        # over the heuristic type guess. A host already known to be android
+        # (from ts-devices.db or devices.db) must never be reclassified as
+        # 'unknown' just because a fresh port scan did not carry a banner.
+        _authoritative_plat=""
+        # 1. Registry by hostkey (most precise: identifies the machine
+        #    regardless of its current IP).
+        if command -v registry_row_by_hostkey >/dev/null 2>&1; then
+            _auth_hk="$(_get_host_key_fingerprint "$_ip" "${_ssh_port:-22}" 2>/dev/null)"
+            if [ -n "$_auth_hk" ]; then
+                _auth_blk="$(registry_row_by_hostkey "$_auth_hk")"
+                [ -n "$_auth_blk" ] && _authoritative_plat="$(blockdb_field "$_auth_blk" platform)"
+            fi
+        fi
+        # 2. Registry by IP (covers hosts whose hostkey we cannot yet fetch
+        #    but whose IP is already recorded in the cloud registry row).
+        if [ -z "$_authoritative_plat" ] && [ -f "$REGISTRY_DB" ] && command -v blockdb_get >/dev/null 2>&1; then
+            _auth_nid=""
+            _auth_aliases="$(awk '
+                BEGIN { RS=""; FS="\n" }
+                {
+                    ip=""; alias=""
+                    for (i=1;i<=NF;i++) {
+                        if ($i ~ /^ip: /) { sub(/^ip: /,"",$i); ip=$i }
+                        if ($i ~ /^alias: /) { sub(/^alias: /,"",$i); alias=$i }
+                    }
+                    if (ip=="'"$_ip"'") print alias
+                }
+            ' "$REGISTRY_DB" 2>/dev/null)"
+            # Registry rows do not carry ip today (IP is local-only), so this
+            # path is a no-op unless a registry row happens to include one.
+            # Kept for forward-compatibility without affecting current data.
+            if [ -n "$_auth_aliases" ]; then
+                for _auth_a in $_auth_aliases; do
+                    _auth_blk="$(blockdb_get "$REGISTRY_DB" alias "$_auth_a" 2>/dev/null || true)"
+                    [ -n "$_auth_blk" ] || continue
+                    _authoritative_plat="$(blockdb_field "$_auth_blk" platform)"
+                    [ -n "$_authoritative_plat" ] && break
+                done
+            fi
+        fi
+        # 3. Fallback: devices.db (WLAN) by IP.
+        if [ -z "$_authoritative_plat" ]; then
+            _auth_blk="$(blockdb_get "$DEVICES_DB" ip "$_ip" 2>/dev/null || true)"
+            [ -n "$_auth_blk" ] && _authoritative_plat="$(blockdb_field "$_auth_blk" platform)"
+        fi
+        # 4. Last fallback: ts-devices.db by IP.
+        if [ -z "$_authoritative_plat" ] && [ -f "$BASE/state/ts-devices.db" ]; then
+            _auth_blk="$(blockdb_get "$BASE/state/ts-devices.db" ip "$_ip" 2>/dev/null || true)"
+            [ -n "$_auth_blk" ] && _authoritative_plat="$(blockdb_field "$_auth_blk" platform)"
+        fi
 
-        log INFO "host $_ip  ttl=${_ttl:-?}  ssh=${_ssh_port:-none}  ports=${_all_ports:-none}  type=$_type"
+        if [ -n "$_authoritative_plat" ] && [ "$_authoritative_plat" != "unknown" ]; then
+            _type="$_authoritative_plat"
+            _type_src="authoritative"
+        else
+            _type="$(_detect_type "${_ttl:-}" "$_ssh_port" "$_ip")"
+            _type_src="heuristic"
+        fi
+
+        log INFO "host $_ip  ttl=${_ttl:-?}  ssh=${_ssh_port:-none}  ports=${_all_ports:-none}  type=$_type (${_type_src})"
 
         # Format: IP|TYPE|TTL|SSH_PORT|ALL_PORTS
         printf '%s|%s|%s|%s|%s\n' \
-            "$_ip" "$_type" "${_ttl:-0}" "${_ssh_port:-22}" "${_all_ports:-}" \
+            "$_display_ip" "$_type" "${_ttl:-0}" "${_ssh_port:-22}" "${_all_ports:-}" \
             >> "$_hosts_partial"
 
         if [ "$_type" = "linux-ssh" ] && [ ! -f "$_deb_marker" ]; then
@@ -306,16 +402,18 @@ _update_registered_hosts() {
             fi
         fi
 
-        if [ -n "$_ssh_port" ] && [ "$_ssh_port" != "$_cur_port" ]; then
+        # Port policy (final): the registry (cloud) value wins when present.
+        # Never overwrite a registered port with a value observed by a scan:
+        # Termux/Android nodes always answer on 8022, and a one-off probe that
+        # sees 22 elsewhere must not silently rewrite their row. The local
+        # devices.db row already has the authoritative port when it was set
+        # from the registry at registration time, so no port update here.
+        if [ "$_registry_port" != "$_cur_port" ] && [ -n "$_registry_port" ]; then
             _existing_nid="$(blockdb_field "$_existing_blk" node_id)"
             _new_blk="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nhostkey: %s\nnode_id: %s\n' \
                 "$_existing" "$_ip" "$_cur_user" "$_registry_port" "${_cur_hk:-}" "${_existing_nid:-}")"
             blockdb_upsert "$DEVICES_DB" alias "$_existing" "$_new_blk"
-            if [ "$_registry_port" != "$_ssh_port" ]; then
-                log INFO "detected SSH port $_ssh_port for '$_existing', but registry.db specifies $_registry_port -- using authoritative cloud value"
-            else
-                log INFO "updated SSH port for '$_existing': $_cur_port → $_ssh_port"
-            fi
+            log INFO "aligned SSH port for '$_existing' to registry value: $_registry_port (was $_cur_port)"
         else
             log INFO "host $_ip already registered as '$_existing'"
         fi

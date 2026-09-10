@@ -58,6 +58,8 @@ ssh_key_bootstrap() {
         [ -n "$_skb_a" ] || continue
         _skb_blk="$(blockdb_get "$_skb_devdb" alias "$_skb_a")"
         [ -n "$_skb_blk" ] || continue
+        _skb_self="$(node_alias 2>/dev/null || printf '')"
+        if [ -n "$_skb_self" ] && [ "$_skb_a" = "$_skb_self" ]; then continue; fi
         _skb_ip="$(blockdb_field "$_skb_blk" ip)"
         if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_skb_ip"; then continue; fi
         if nssh "$_skb_a" "true" >/dev/null 2>&1; then
@@ -74,13 +76,29 @@ ssh_key_bootstrap() {
                 log OK "remote key from $_skb_a installed locally"
             fi
         else
+            # nssh failed (key not yet accepted). Try ssh-copy-id using the
+            # authoritative port and user from the SAME block used by nssh
+            # (never a guessed default), then re-try via nssh. Only if both
+            # fail is this node added to the manual-setup list.
             _skb_port="$(blockdb_field "$_skb_blk" port)"; _skb_port="${_skb_port:-8022}"
-            _skb_target="u@${_skb_ip}"
+            _skb_user="$(blockdb_field "$_skb_blk" user)"; _skb_user="${_skb_user:-u}"
+            _skb_target="${_skb_user}@${_skb_ip}"
+            _skb_manual_line="ssh-copy-id -p ${_skb_port} -i ${_skb_pub} ${_skb_target}"
             if has_cmd ssh-copy-id && ssh-copy-id -p "$_skb_port" -i "$_skb_pub" "$_skb_target" >/dev/null 2>&1; then
                 log OK "key installed on $_skb_a via ssh-copy-id"
-                continue
+                # Re-attempt bidirectional exchange now that key auth works.
+                if nssh "$_skb_a" "true" >/dev/null 2>&1; then
+                    _remote_pub="$(nssh "$_skb_a" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
+                    if [ -n "$_remote_pub" ]; then
+                        mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
+                        grep -qxF "$_remote_pub" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_remote_pub" >> ~/.ssh/authorized_keys
+                        log OK "remote key from $_skb_a installed locally"
+                    fi
+                    continue
+                fi
             fi
             _skb_need_manual="$_skb_need_manual $_skb_a"
+            _SKB_MANUAL_LINES="${_SKB_MANUAL_LINES:-}${_skb_manual_line}\n"
         fi
     done <<EOF_SKB1
 $_skb_aliases
@@ -88,17 +106,23 @@ EOF_SKB1
 
     if [ -n "$_skb_need_manual" ]; then
         log WARN "nodes needing first-time key setup:$_skb_need_manual"
-        for _skb_m in $_skb_need_manual; do
-            printf '    run once:  ssh-copy-id -i %s u@%s:%s\n' "$_skb_pub" "$_skb_ip" "$_skb_port"
-        done
+        printf '%b' "${_SKB_MANUAL_LINES:-}"
     fi
 
     while IFS= read -r _skb_a2; do
         [ -n "$_skb_a2" ] || continue
         _skb_blk2="$(blockdb_get "$_skb_devdb" alias "$_skb_a2")"
         [ -n "$_skb_blk2" ] || continue
+        _skb_self2="$(node_alias 2>/dev/null || printf '')"
+        if [ -n "$_skb_self2" ] && [ "$_skb_a2" = "$_skb_self2" ]; then
+            log OK "handshake $_skb_a2: self (skipped)"
+            continue
+        fi
         _skb_ip2="$(blockdb_field "$_skb_blk2" ip)"
-        if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_skb_ip2"; then continue; fi
+        if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_skb_ip2"; then
+            log OK "handshake $_skb_a2: self-ip (skipped)"
+            continue
+        fi
         if nssh "$_skb_a2" "true" >/dev/null 2>&1; then
             log OK "handshake $_skb_a2: OK"
         else
