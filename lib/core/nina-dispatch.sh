@@ -97,6 +97,9 @@ _do_discover() {
             }
         ' "$BASE/state/ts-devices.db" 2>/dev/null)"
         if [ -n "$_ts_ips" ]; then
+            if command -v _purge_wlan_rows_when_tailscale_active >/dev/null 2>&1; then
+                _purge_wlan_rows_when_tailscale_active
+            fi
             HOST_LIST="$_ts_ips"
             _save_host_list_cache
             log OK "discover: $(printf '%s\n' "$_ts_ips" | wc -l | tr -d ' ') tailscale host(s) -- WLAN skipped"
