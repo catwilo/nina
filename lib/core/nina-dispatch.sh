@@ -86,14 +86,14 @@ _do_discover() {
         _my_nid="$(node_id 2>/dev/null || true)"
         _ts_ips="$(awk -v mynid="$_my_nid" '
             BEGIN { RS=""; FS="\n" }
-            /ip: 100\./ {
+            {
                 blk_nid=""
                 blk_ip=""
                 for (i=1;i<=NF;i++) {
                     if ($i ~ /^ip:/) { sub(/^ip: /,"",$i); blk_ip=$i }
                     if ($i ~ /^node_id:/) { sub(/^node_id: /,"",$i); blk_nid=$i }
                 }
-                if (blk_nid != mynid && blk_ip != "") print blk_ip
+                if (blk_nid != mynid && blk_ip ~ /^100\./) print blk_ip
             }
         ' "$BASE/state/ts-devices.db" 2>/dev/null)"
         if [ -n "$_ts_ips" ]; then

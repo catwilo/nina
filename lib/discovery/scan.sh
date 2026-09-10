@@ -551,7 +551,11 @@ discover_hosts() {
     if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
         _ts_ips="$(awk '
             BEGIN { RS=""; FS="\n" }
-            /^ip: 100\./ { for (i=1;i<=NF;i++) { if ($i ~ /^ip:/) { sub(/^ip: /,"",$i); print $i } } }
+            {
+                for (i=1;i<=NF;i++) {
+                    if ($i ~ /^ip: 100\./) { sub(/^ip: /,"",$i); print $i }
+                }
+            }
         ' "$BASE/state/ts-devices.db" 2>/dev/null | grep -v "^$MY_IP$" || true)"
         if [ -n "$_ts_ips" ]; then
             _purge_wlan_rows_when_tailscale_active
