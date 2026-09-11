@@ -178,10 +178,15 @@ fi
 # ---------------------------------------------------------------------------
 # Symlink tools to BINDIR (executable bit already set in the repo)
 # ---------------------------------------------------------------------------
+# Files whose name starts with "_" (e.g. bin/_bootstrap) are internal helpers
+# sourced by the binary via its own directory, NOT commands meant to be on
+# PATH. Skipping them avoids colliding with same-named helpers from other
+# toolkit repos (debux, gya), which would otherwise overwrite each other in
+# BINDIR and cause a binary to source the wrong bootstrap.
 for _b in "$SCRIPT_DIR"/bin/*; do
     [ -f "$_b" ] || continue
     _name="$(basename "$_b")"
-    case "$_name" in *.bak) continue ;; esac
+    case "$_name" in *.bak) continue ;; _*) continue ;; esac
     ln -sf "$_b" "$BINDIR/$_name"
 done
 log INFO "tools linked"
