@@ -354,6 +354,18 @@ _update_registered_hosts() {
     while IFS='|' read -r _ip _type _ttl _ssh_port _all_ports; do
         [ -n "$_ip" ] || continue
 
+        # tailscale-first: an IP already recorded in ts-devices.db is
+        # registered by definition -- skip WLAN re-registration to avoid
+        # treating a known tailscale peer as a new host.
+        if [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
+            _ts_pre_blk="$(blockdb_get "$BASE/state/ts-devices.db" ip "$_ip" 2>/dev/null || true)"
+            if [ -n "$_ts_pre_blk" ]; then
+                _ts_pre_alias="$(blockdb_field "$_ts_pre_blk" alias)"
+                log INFO "host $_ip already registered as '$_ts_pre_alias' (tailscale)"
+                continue
+            fi
+        fi
+
         _existing_blk="$(blockdb_get "$DEVICES_DB" ip "$_ip")"
         if [ -z "$_existing_blk" ]; then
             _pre_hk="$(_get_host_key_fingerprint "$_ip" "${_ssh_port:-22}" 2>/dev/null)"
@@ -452,6 +464,10 @@ new_hosts_list() {
         if [ -z "$_found_blk" ]; then
             _nhl_hk="$(_get_host_key_fingerprint "$_ip" "${_ssh_port:-22}" 2>/dev/null)"
             [ -n "$_nhl_hk" ] && _found_blk="$(blockdb_get "$DEVICES_DB" hostkey "$_nhl_hk")"
+        fi
+        if [ -z "$_found_blk" ] && [ -f "$BASE/state/ts-devices.db" ] && [ -s "$BASE/state/ts-devices.db" ]; then
+            _nhl_ts_blk="$(blockdb_get "$BASE/state/ts-devices.db" ip "$_ip" 2>/dev/null || true)"
+            [ -n "$_nhl_ts_blk" ] && _found_blk="$_nhl_ts_blk"
         fi
         [ -z "$_found_blk" ] && printf '%s|%s|%s\n' "$_ip" "$_type" "${_ssh_port:-22}"
     done < "$_hdb"

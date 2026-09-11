@@ -83,8 +83,14 @@ load_cache() {
 # Refuses to write if critical variables are empty.
 save_cache() {
     CACHE="${BASE}/state/cache.env"
-    if [ -z "${MY_IP:-}" ] || [ -z "${SUBNET:-}" ]; then
-        log WARN "save_cache: MY_IP or SUBNET is empty — cache not updated"
+    if [ -z "${MY_IP:-}" ]; then
+        log WARN "save_cache: MY_IP is empty — cache not updated"
+        return 0
+    fi
+    # Tailscale-first: SUBNET is legitimately empty when the active path
+    # is tailscale. Only reject an empty SUBNET on a non-tailscale path.
+    if [ -z "${SUBNET:-}" ] && [ "${PRIMARY_IFACE:-}" != "tailscale" ]; then
+        log WARN "save_cache: SUBNET is empty on non-tailscale path — cache not updated"
         return 0
     fi
 

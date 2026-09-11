@@ -536,7 +536,11 @@ _purge_wlan_rows_when_tailscale_active() {
 }
 
 discover_hosts() {
-    log INFO "discovering hosts on $SUBNET"
+    if [ -n "${SUBNET:-}" ]; then
+        log INFO "discovering hosts on $SUBNET"
+    else
+        log INFO "discovering hosts (tailscale-first, no WLAN)"
+    fi
 
     _arp_tmp="$(session_tmp arp_out)"
     _ssh_tmp="$(session_tmp ssh_out)"
