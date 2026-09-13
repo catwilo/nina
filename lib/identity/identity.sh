@@ -23,6 +23,38 @@
 # (miko-task#102 precondition; see noemap#51). REGISTRY_DB can still be
 # overridden via env var for tests or alternate setups.
 
+# _identity_load_deps -- carga las dependencias de este modulo desde LIB.
+#
+# Regla general del ecosistema: cada modulo debe poder sourcearse de forma
+# aislada por cualquier consumidor (nina, miko, ut, ksite, ...) sin que el
+# consumidor conozca el orden de carga interno de nina. Este bloque hace
+# que identity.sh cumpla esa regla: si blockdb_get/blockdb_field no estan
+# ya definidos (porque nina ya cargo blockdb.sh, o porque otro modulo lo
+# hizo), se cargan aqui antes de que este archivo los use.
+#
+# Idempotente: si ya estan cargados, no hace nada.
+_identity_load_deps() {
+    if command -v blockdb_get >/dev/null 2>&1 && command -v blockdb_field >/dev/null 2>&1; then
+        return 0
+    fi
+    _ild_here="$(cd "$(dirname "$0")" && pwd)"
+    _ild_root="$(cd "$_ild_here/../.." && pwd)"
+    for _ild_cand in \
+        "$_ild_root/lib/core/blockdb.sh" \
+        "$HOME/.local/share/nina/lib/core/blockdb.sh" \
+        "$HOME/unix-toolkit-tools/nina/lib/core/blockdb.sh"
+    do
+        if [ -f "$_ild_cand" ]; then
+            # shellcheck source=/dev/null
+            . "$_ild_cand"
+            return 0
+        fi
+    done
+    printf '[WARN] identity.sh: blockdb.sh no encontrado, node_alias() puede fallar\n' >&2
+    return 0
+}
+_identity_load_deps
+
 # _identity_statedir -- resolve the state dir consistently with the rest of noemap.
 _identity_statedir() {
     if [ -n "${NOEMAP_DATA:-}" ] && [ -d "$NOEMAP_DATA" ]; then

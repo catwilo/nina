@@ -153,3 +153,70 @@ Sesion 2026-08-30/31 (arquitectura base hostkey en registry.db):
 
 Sesion 2026-09-04 (identity fix + nhkrefresh):
   43618df  feat(noemap): add nhkrefresh hostkey reconciliation script
+
+## Modulos autocontenidos
+
+Regla general del ecosistema: **cada modulo debe poder sourcearse de forma
+aislada por cualquier consumidor** (nina, miko, ut, ksite, ...) sin que el
+consumidor conozca el orden de carga interno de nina. Cuando un modulo
+depende de funciones definidas en otro archivo, el modulo debe cargarlas
+por su cuenta si no estan ya presentes.
+
+El patron se implementa asi, al inicio del modulo, antes de la primera
+funcion que lo necesite:
+
+    _<modulo>_load_deps() {
+        if command -v <funcion_requerida> >/dev/null 2>&1; then
+            return 0
+        fi
+        _here="$(cd "$(dirname "$0")" && pwd)"
+        _root="$(cd "$_here/../.." && pwd)"
+        for _cand in \
+            "$_root/lib/core/<dep>.sh" \
+            "$HOME/.local/share/nina/lib/core/<dep>.sh" \
+            "$HOME/unix-toolkit-tools/nina/lib/core/<dep>.sh"
+        do
+            if [ -f "$_cand" ]; then
+                . "$_cand"
+                return 0
+            fi
+        done
+        printf '[WARN] %s: <dep>.sh no encontrado\n' "$0" >&2
+        return 0
+    }
+    _<modulo>_load_deps
+
+Propiedades del patron:
+
+- **Idempotente.** Si el consumidor ya cargo la dependencia (porque nina
+  la cargo antes), el bloque no hace nada.
+- **Portable.** Busca la dependencia en varias rutas candidatas: relativa
+  al modulo, en el install dir (~/.local/share/nina), y en el repo.
+- **Silencioso en caso normal, ruidoso en caso anomalo.** Si encuentra la
+  dependencia no imprime nada. Si no la encuentra, avisa por stderr y
+  sigue (no aborta) para no bloquear al consumidor.
+
+### Caso concreto: identity.sh y blockdb.sh
+
+`lib/identity/identity.sh` usa `blockdb_get` y `blockdb_field` (definidas
+en `lib/core/blockdb.sh`) en `node_alias()`, `node_registry_row()`,
+`_own_devices_ip()`. Cuando `nina` corre, el entry point carga
+`blockdb.sh` antes que `identity.sh` y todo funciona. Cuando `miko` sourcea
+`identity.sh` standalone (para resolver `node_alias()` desde Python), las
+funciones de blockdb no existen y `node_alias()` fallaba silenciosamente
+devolviendo vacio.
+
+Fix aplicado en `identity.sh`: bloque `_identity_load_deps()` al inicio
+que carga `blockdb.sh` si no esta ya cargado.
+
+Sintoma tipico de este bug: **una funcion que parecia funcionar (porque
+devolvia "" sin error) y en realidad nunca funciono**. Buscar este patron
+cuando un consumidor externo a nina sourcea cualquier modulo de `lib/`.
+
+### Regla para modulos nuevos
+
+Al agregar un modulo a `lib/` que dependa de otro, incluir el bloque
+`_<modulo>_load_deps()` al inicio. No asumir que el entry point va a
+cargar la dependencia antes. Esto aplica tanto a modulos que nina usa
+internamente como a modulos pensados para ser consumidos por terceros.
+
