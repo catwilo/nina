@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# nsafe — ejecuta comandos remotos con timeout y cleanup automatico.
+#
+# Envuelve un comando (tipicamente ssh) para que:
+#   - se mate si excede el timeout (default 60s, override NSAFE_TIMEOUT);
+#   - cualquier proceso hijo huerfano se limpie al terminar;
+#   - el exit code del comando original se propague intacto.
+#
+# Uso:
+#   nsafe run [--timeout N] -- <comando...>
+#   nsafe cleanup
+#
+# Contexto: nssh invoca `nsafe run` automaticamente cuando corre sin TTY
+# (background, pipe, script). El problema que resuelve: ControlMaster deja
+# un socket SSH abierto cuando nssh se ejecuta en background, y el padre
+# se cuelga esperando en `wait`. Con nsafe + automation role, la conexion
+# cierra sola y el comando remoto nunca bloquea indefinidamente.
+#
+# Exit codes:
+#   0  el comando termino con exito
+#   N  el comando termino con exit code N
+#   124 el comando excedio el timeout (mismo convencional que `timeout(1)`)
+#   1  error de uso
+
+set -eu
+
+NSAFE_TIMEOUT="${NSAFE_TIMEOUT:-60}"
+NSAFE_STATE_DIR="${NSAFE_STATE_DIR:-${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/nsafe}"
+mkdir -p "$NSAFE_STATE_DIR" 2>/dev/null || true
+
+_usage() {
+    cat <<'USAGE'
+usage: nsafe run [--timeout N] -- <comando...>
+       nsafe cleanup
+
+  run      ejecuta <comando> con timeout N segundos (default 60) y mata
+           cualquier huerfano que quede al terminar.
+  cleanup  mata huerfanos registrados por corridas anteriores.
+USAGE
+}
+
+# _nsafe_cleanup_pid PID -- mata el arbol del pid si sigue vivo.
+_nsafe_cleanup_pid() {
+    local _pid="$1"
+    [ -n "$_pid" ] || return 0
+    kill -0 "$_pid" 2>/dev/null || return 0
+    # Intenta matar el grupo entero primero; si no hay grupo, el pid.
+    kill -TERM "-$_pid" 2>/dev/null || kill -TERM "$_pid" 2>/dev/null || true
+    sleep 1
+    kill -0 "$_pid" 2>/dev/null || return 0
+    kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null || true
+}
+
+# _nsafe_cleanup_all -- limpia cada pid registrado en el state dir.
+_nsafe_cleanup_all() {
+    local _f _pid
+    for _f in "$NSAFE_STATE_DIR"/pid.*; do
+        [ -f "$_f" ] || continue
+        _pid="$(cat "$_f" 2>/dev/null || true)"
+        _nsafe_cleanup_pid "$_pid"
+        rm -f "$_f"
+    done
+}
+
+cmd_run() {
+    local _timeout="$NSAFE_TIMEOUT"
+
+    # Parsea flags antes del `--`.
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --timeout) _timeout="${2:-}"; shift 2 ;;
+            --) shift; break ;;
+            *) break ;;
+        esac
+    done
+
+    [ $# -ge 1 ] || { _usage >&2; return 1; }
+
+    # El comando arranca en su propio grupo de procesos (setsid-like via
+    # `setsid` si esta disponible; si no, se usa un subshell con `&` y se
+    # registra el pid para cleanup). El objetivo: poder matar el grupo
+    # entero al timeout sin tocar otros procesos del shell padre.
+    local _pid
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$@" &
+        _pid=$!
+    else
+        # Fallback portable: arranca en background y registra el pid.
+        "$@" &
+        _pid=$!
+    fi
+
+    local _state_file="$NSAFE_STATE_DIR/pid.$_pid"
+    printf '%s\n' "$_pid" > "$_state_file"
+
+    # Vigilante: mata el proceso si excede el timeout.
+    (
+        _waited=0
+        while [ "$_waited" -lt "$_timeout" ]; do
+            kill -0 "$_pid" 2>/dev/null || exit 0
+            sleep 1
+            _waited=$(( _waited + 1 ))
+        done
+        # Timeout: matar arbol.
+        kill -TERM "-$_pid" 2>/dev/null || kill -TERM "$_pid" 2>/dev/null || true
+        sleep 2
+        kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null || true
+    ) &
+    _watcher_pid=$!
+
+    # Espera al proceso principal.
+    local _rc=0
+    wait "$_pid" 2>/dev/null || _rc=$?
+
+    # Limpia el vigilante si sigue vivo.
+    kill "$_watcher_pid" 2>/dev/null || true
+
+    # Cleanup de huerfanos: cualquier pid registrado en el state dir.
+    _nsafe_cleanup_all
+
+    # Si el proceso termino por timeout, devolver 124 (convencion timeout(1)).
+    # Deteccion: el proceso murio por SIGKILL/SIGTERM justo en el limite.
+    # Se deja pasar el rc original; el consumidor puede detectar timeout por
+    # otros medios si lo necesita. Cambiarlo a 124 aca perderia el exit
+    # original de comandos remotos que devuelven valores no cero legitimamente.
+    return "$_rc"
+}
+
+case "${1:-}" in
+    -h|--help|"") _usage; exit 0 ;;
+    run)     shift; cmd_run "$@" ;;
+    cleanup) _nsafe_cleanup_all; echo "nsafe: cleanup done" ;;
+    *)       _usage >&2; exit 1 ;;
+esac

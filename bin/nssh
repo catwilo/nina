@@ -33,17 +33,46 @@ _source_mods core/util.sh core/blockdb.sh misc/devices.sh
 
 case "${1:-}" in
     -h|--help)
-        printf 'usage: nssh [-t|--pty] <alias> [command...]\n'
+        printf 'usage: nssh [-t|--pty] [--safe|--raw] <alias> [command...]\n'
         printf '  SSH to a device registered in devices.db; forwards any command.\n'
         printf '  -t, --pty   force pseudo-terminal allocation (for remote sudo, etc.)\n'
+        printf '  --safe      force nsafe wrapper (timeout + cleanup)\n'
+        printf '  --raw       disable nsafe wrapper even in non-interactive context\n'
+        printf '  Sin flags, nssh usa nsafe automaticamente cuando no hay TTY\n'
+        printf '  (background, pipe, script), para no colgarse por ControlMaster.\n'
         exit 0
         ;;
 esac
 
-# Optional PTY flag before the alias: nssh -t <alias> <cmd>
+# Optional flags before the alias:
+#   -t|--pty  force PTY
+#   --safe    force nsafe wrapper (timeout + cleanup)
+#   --raw     disable nsafe wrapper even in non-interactive context
+# Default: usar nsafe si no hay TTY (detectado mas abajo).
 _pty=""
-case "${1:-}" in
-    -t|--pty) _pty="-tt"; shift ;;   # -tt forces PTY even when stdin is not a terminal
+_nsafe_override=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -t|--pty) _pty="-tt"; shift ;;
+        --safe)   _nsafe_override="force"; shift ;;
+        --raw)    _nsafe_override="off"; shift ;;
+        *)        break ;;
+    esac
+done
+
+# Deteccion de contexto: si no hay TTY y no se pidio --raw, usar nsafe.
+# Razon: ControlMaster deja un socket SSH abierto cuando nssh corre en
+# background, y el padre se cuelga esperando en `wait`. nsafe le pone un
+# timeout y limpia huerfanos automaticamente.
+_use_nsafe=0
+case "$_nsafe_override" in
+    force) _use_nsafe=1 ;;
+    off)   _use_nsafe=0 ;;
+    *)
+        if [ ! -t 0 ]; then
+            _use_nsafe=1
+        fi
+        ;;
 esac
 
 
@@ -84,10 +113,18 @@ fi
 
 _ssh_connect() {
     if [ -f "$CFG" ]; then
-        ssh -F "$CFG" $_pty -p "$_port" "${_user}@${_ip}" "$@"
+        _ssh_args=(ssh -F "$CFG" $_pty -p "$_port" "${_user}@${_ip}")
     else
         log WARN "ssh_config not found at $CFG - connecting without it"
-        ssh $_pty -p "$_port" "${_user}@${_ip}" "$@"
+        _ssh_args=(ssh $_pty -p "$_port" "${_user}@${_ip}")
+    fi
+
+    if [ "$_use_nsafe" -eq 1 ] && command -v nsafe >/dev/null 2>&1; then
+        # Sin TTY, envolver ssh en nsafe: timeout + cleanup de huerfanos.
+        # Evita el cuelgue por ControlMaster en contextos background.
+        nsafe run -- "${_ssh_args[@]}" "$@"
+    else
+        "${_ssh_args[@]}" "$@"
     fi
 }
 

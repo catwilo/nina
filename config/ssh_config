@@ -37,6 +37,8 @@ Match exec "[ \"${NOEMAP_SSH_ROLE:-}\" = 'transfer' ]"
 # as transfer above -- interactive nssh usage by a human is unaffected)
 Match exec "[ \"${NOEMAP_SSH_ROLE:-}\" = 'automation' ]"
     BatchMode yes
+    ControlMaster no
+    ControlPath none
 
 # User per-host overrides (RemoteForward, IdentityFile, etc.)
 Include ~/.ssh/config
