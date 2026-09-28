@@ -268,7 +268,7 @@ _self_register() {
     if [ -z "$_self_alias" ]; then
         _self_prompt_rc=1
         if command -v _prompt_self_identity >/dev/null 2>&1; then
-            _self_alias="$(_prompt_self_identity)"; _self_prompt_rc=$?
+            _self_alias="$(_prompt_self_identity)" || _self_prompt_rc=$?
         fi
         if [ -z "$_self_alias" ]; then
             if [ "$_self_prompt_rc" -eq 1 ] && [ ! -t 1 ]; then
