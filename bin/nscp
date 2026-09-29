@@ -41,7 +41,7 @@ _bindir="$(cd "$(dirname "$_self")" && pwd -P)"
 # -----------------------------------------------------------------------
 # Load shared helpers
 # -----------------------------------------------------------------------
-_source_mods core/util.sh core/blockdb.sh misc/devices.sh
+_source_mods core/util.sh core/network.sh core/blockdb.sh identity/identity.sh identity/registry.sh connection/devices.sh
 
 # -----------------------------------------------------------------------
 # Argument parsing

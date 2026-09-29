@@ -33,7 +33,7 @@ else
     DATA="$_repo_base"
 fi
 LIB="$DATA/lib"
-DB="$DATA/state/devices.db"
+DB="$DATA/state/ts-devices.db"
 CFG="$DATA/config/ssh_config"
 HELPTXT="$DATA/readme.txt"
 export BASE="$DATA"

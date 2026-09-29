@@ -65,6 +65,9 @@ _self_register() {
     if [ -n "$_self_blk_by_alias" ]; then
         _self_prev_hk="$(blockdb_field "$_self_blk_by_alias" hostkey)"
     fi
+    if [ -z "$_self_prev_hk" ] && command -v _get_host_key_fingerprint >/dev/null 2>&1; then
+        _self_prev_hk="$(_get_host_key_fingerprint 127.0.0.1 "$_self_port" 2>/dev/null || true)"
+    fi
 
     _ts_db="$BASE/state/ts-devices.db"
     [ -f "$_ts_db" ] || : > "$_ts_db"

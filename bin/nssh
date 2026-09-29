@@ -29,7 +29,7 @@ else
 fi
 _bindir="$(cd "$(dirname "$_self")" && pwd -P)"
 . "$_bindir/_bootstrap"
-_source_mods core/util.sh core/blockdb.sh misc/devices.sh
+_source_mods core/util.sh core/network.sh core/blockdb.sh identity/identity.sh identity/registry.sh connection/devices.sh
 
 case "${1:-}" in
     -h|--help)
