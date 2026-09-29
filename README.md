@@ -1,49 +1,71 @@
 # nina
 
-Network discovery and SSH device mapper for LAN environments. Scans for
-SSH-reachable hosts, registers them under short aliases, and provides
-alias-aware wrappers around ssh, scp, rsync, and clipboard copy.
+Tailscale-only SSH device mapper. Manages node identity in a cloud-backed
+registry, syncs a local device table (`ts-devices.db`) across peers, and
+provides alias-aware wrappers around ssh and scp.
 
-Targets: Debian 13 and Termux (non-root). Shell: POSIX sh for tools.
+Targets: Debian 13 and Termux (non-root). Shell: POSIX sh.
 
 ## Install
 
-    nina install
+    sh install.sh
 
-Idempotent. Symlinks `bin/*` into `~/.local/bin` (or `$PREFIX/bin` on
-Termux) and writes a delimited block to `~/.zshrc` (PATH fallback).
-Re-running overwrites the previous block cleanly.
+Idempotent. Symlinks `bin/*` into `$PREFIX/bin` (Termux) or `~/.local/bin`,
+and `lib/` into `~/.local/share/nina/lib`. State files stay user-owned.
 
 ## Commands
 
-All commands accept `-h` for usage.
+All commands accept `-h`.
 
-- `nina` — fast scan for SSH hosts, then prompt to register new ones.
-  - `--ports` shows open ports.
-  - `-i <iface>` forces the network interface (otherwise derived from the
-    default route).
-- `nina devices` — manage the device database (list, add, edit, rename,
-  remove, update-ip, rollback, push-vpn, resetall, node-set, node-add,
-  registry-set, hostkey-refresh).
-- `nssh <alias> [cmd...]` -- SSH to an alias; forwards an optional command.
-- `nscp [-r] <src> <dst>` — scp using aliases; `alias:/path` for remote.
-- `nina clip get <alias:/path>` — copy a remote file to the clipboard via
-  clipso.
-- `nina clip send [--ssh] <alias>` — send stdin to a remote clipboard.
-- `nina clip set <src> <dst>` — define clipboard direction and smoke-test.
-- `nina clip tunnel <start|stop|restart|status>` — manage the SSH RemoteForward
-  listener.
-- `nina clip serve <start|stop|restart|status>` — manage the TCP/ncat listener.
+### Top-level
 
-## Interface selection
+- `nina` — run the full pipeline: self-register + seed + bootstrap-keys + push.
+- `nina self-register` — register this node identity.
+- `nina seed` — pull peer rows from the cloud registry.
+- `nina bootstrap-keys` — distribute SSH keys to registered peers.
+- `nina push` — sync `ts-devices.db` to all peers.
+- `nina status` — list devices; marks the local node.
 
-On multi-homed hosts, the scan interface is derived from the default
-route, not the first interface the kernel lists. Override with
-`nina -i <iface>`.
+### Devices
+
+- `nina devices list`
+- `nina devices add <alias> <ip> <user> [port]`
+- `nina devices edit|rename|remove|update-ip|refresh-ips|rollback`
+- `nina devices push-vpn`
+- `nina devices resetall`
+- `nina devices node-set <alias> [user] [port] [platform]`
+- `nina devices node-add <node-id> <alias> <user> <port> <platform>`
+- `nina devices registry-set <node-id> <alias> [user] [port] [platform]`
+- `nina devices hostkey-refresh`
+
+### Clip
+
+- `nina clip get <alias>:/path`
+- `nina clip send [--ssh] <alias>`
+- `nina clip set|clear|status`
+- `nina clip tunnel <start|stop|restart|status>`
+- `nina clip serve  <start|stop|restart|status>`
+
+### Standalone wrappers
+
+- `nssh <alias> [cmd...]`
+- `nscp [-r] <src> <dst>`
+- `nsafe run -- <cmd...>`
+
+## Identity
+
+Registry (`~/.nina-registry/registry.db`, git-backed) is the cloud source of
+truth for node identity. Aliases are **assigned manually** — no automatic
+suggestion. `_registry_write` reclaims an alias when the local SSH hostkey
+matches an existing row; genuine collisions abort with a visible error.
 
 ## Layout
 
-    bin/     command-line tools
-    lib/     shared helpers (devices, iface, scan, ...)
+    bin/     command-line tools and _bootstrap
+    lib/core/       util, network, blockdb, lock, dispatch, prompt_field
+    lib/identity/   identity, registry, seed, self_register, prompt
+    lib/commands/   devices, clip, discovery
+    lib/connection/ devices, sync, ssh_bootstrap
+    lib/output/     output (render only)
     config/  ssh_config used by the wrappers
-    state/   devices.db and cache.env
+    state/   ts-devices.db (real), cache.env (real)

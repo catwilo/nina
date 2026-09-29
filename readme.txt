@@ -1,16 +1,18 @@
 
-  nina — network discovery and SSH device mapper
+  nina — tailscale-only SSH device mapper
   ─────────────────────────────────────────────────────────────────────
 
-  DISCOVERY
+  TOP-LEVEL
 
-    nina                   Fast scan: find SSH hosts on ports 22/8022/2222.
-                           Validates registered hosts first via ping.
-                           Displays results, then prompts to register new hosts.
-
-    nina --ports           Show all probed ports per host in the results table.
-
-
+    nina                   Run the full pipeline: self-register + seed
+                           + bootstrap-keys + push.
+    nina self-register     Register this node identity in ts-devices.db
+                           and registry.db.
+    nina seed              Pull other nodes rows from the cloud registry.
+    nina bootstrap-keys    Distribute SSH keys to registered peers.
+    nina push              Sync ts-devices.db to all registered peers.
+    nina status            List devices; marks the local node.
+    nina -h | --help       Show this help.
 
   ─────────────────────────────────────────────────────────────────────
 
@@ -19,9 +21,8 @@
     nssh <alias>                    Open interactive SSH session.
     nssh <alias> <cmd> [args...]    Run command remotely, print output.
 
-      nssh deb                      # interactive shell
-      nssh deb uname -a             # single command -> stdout
-      nssh deb 'df -h | head -5'   # piped command (quote it)
+      nssh tx1                      # interactive shell
+      nssh tx1 uname -a             # single command -> stdout
 
   ─────────────────────────────────────────────────────────────────────
 
@@ -30,59 +31,61 @@
     nscp <alias>:/remote/path ./local/    Copy from remote to local.
     nscp ./local/file <alias>:/remote/    Copy from local to remote.
 
-    nina clip get <alias>:/remote/path            Copy remote file content to clipboard
-                                          (requires clipso / xclip / pbcopy).
+  ─────────────────────────────────────────────────────────────────────
+
+  DEVICE MANAGEMENT  (nina devices)
+
+    nina devices list                            List all devices.
+    nina devices add <alias> <ip> <user> [port]  Register manually.
+    nina devices edit <alias>                    Edit device details.
+    nina devices rename <old> <new>              Rename alias.
+    nina devices remove <alias> [alias...]       Remove devices.
+    nina devices update-ip <alias> <ip>          Set device IP.
+    nina devices refresh-ips                     Refresh local IP from tun0;
+                                                 peers from tailscale CLI (jq)
+                                                 if present.
+    nina devices push-vpn                        Sync ts-devices.db to peers.
+    nina devices rollback <alias>                Restore from snapshot.
+    nina devices resetall                        Wipe ts-devices.db + known_hosts.
+    nina devices node-set <alias> [user] [port] [platform]
+                                                 Set THIS node identity.
+    nina devices node-add <node-id> <alias> <user> <port> <platform>
+                                                 Register another node.
+    nina devices registry-set <node-id> <alias> [user] [port] [platform]
+                                                 Edit any node in registry.
+    nina devices hostkey-refresh                 Refresh SSH host keys.
 
   ─────────────────────────────────────────────────────────────────────
 
   CLIP (clipboard forwarding, tmux-backed)
 
-    nina clip tunnel start                    Start local listener (Unix socket,
-                                          tmux session "nina-clip-tunnel").
-    nina clip tunnel stop                     Stop listener, remove socket.
-    nina clip tunnel restart                  stop + start.
-    nina clip tunnel status                   Show running state and socket path.
-    nina clip serve start                   Start TCP listener (tmux session
-                                          "nina-clip-serve", requires ncat).
-    nina clip serve stop                    Stop TCP listener.
-    nina clip serve restart                 stop + start.
-    nina clip serve status                  Show TCP listener state.
-
-    nina clip set <src> <dst>                 Define clipboard direction (src sends,
-                                          dst receives). Starts nina clip serve
-                                          start on dst, then runs a
-                                          smoke-test send+read to confirm.
-    nina clip status                      Show current direction config.
-    nina clip clear                       Stop listener on dst, remove config.
-
-                                          Direction is explicit, not inferred
-                                          from ssh initiator. Not persisted
-                                          across reboots -- re-run per session.
-
-  ─────────────────────────────────────────────────────────────────────
-
-  DEVICE MANAGEMENT  (nina devices)
-
-    nina devices list                  List all registered devices.
-    nina devices edit <alias>               Edit alias / IP / user / port.
-    nina devices rename <old> <new>         Rename alias.
-    nina devices remove <alias> [alias...]  Remove one or more devices.
-    nina devices update-ip <alias> <ip>     Update IP, auto-clean known_hosts.
-    nina devices resetall                   Wipe devices.db + known_hosts + hosts.db + cache.
+    nina clip get <alias>:/remote/path   Copy remote file to local clipboard.
+    nina clip send [--ssh] <alias>       Send stdin to remote clipboard.
+    nina clip set <src> <dst>            Define direction + smoke-test.
+    nina clip clear                      Clear direction config.
+    nina clip status                     Show direction config.
+    nina clip tunnel <start|stop|restart|status>
+                                         Unix socket listener (SSH RemoteForward).
+    nina clip serve  <start|stop|restart|status>
+                                         TCP listener (ncat, port 9988).
 
   ─────────────────────────────────────────────────────────────────────
 
   NOTES
 
-    • Aliases are short names you assign during registration (deb, cel, pi ...).
-    • All tools resolve aliases from  $NINA_BASE/state/devices.db
-    • SSH config lives at            $NINA_BASE/config/ssh_config
-    • known_hosts lives at           ~/.local/share/nina/known_hosts
-    • Logs at                        $NINA_BASE/logs/nina.log
+    • Aliases are short names you assign manually during registration
+      (tx1, tx2, ...). No automatic suggestion.
+    • All tools resolve aliases from  $NINA_BASE/state/ts-devices.db
+    • registry.db (cloud source of identity) lives at
+      ~/.nina-registry/registry.db
+    • SSH config lives at             $NINA_BASE/config/ssh_config
+    • known_hosts lives at            ~/.local/share/nina/known_hosts
+    • Logs at                         $NINA_BASE/logs/nina.log
 
-    • On each run: registered hosts are pinged first. Non-responding hosts
-      are removed automatically. Responding hosts skip the full scan.
+    • Tailscale-only: peers are reached via their 100.x IP.
+      Without the tailscale CLI installed, peer IPs must be populated
+      once with: nina devices update-ip <alias> <ip>
 
-    • Type detection = port only (8022->android, 22/2222->linux).
-      No nmap -sV, no banner grab. Safe and quick on Termux.
+    • Identity is stable across reinstall: registry.sh reclaims the
+      alias when the local SSH hostkey matches an existing row.
 
