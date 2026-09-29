@@ -190,5 +190,16 @@ else
     _p_flag=""
     [ -n "$_port" ] && _p_flag="-P $_port"
     # shellcheck disable=SC2086
-    exec scp $_scp_args $_p_flag $_r_flag "$_src" "$_dst"
+    _scp_rc=0
+    scp $_scp_args $_p_flag $_r_flag "$_src" "$_dst" || _scp_rc=$?
+    if [ "$_scp_rc" -ne 0 ]; then
+        log ERROR "scp failed (rc=$_scp_rc)"
+        case "$_dst" in
+            *:/tmp/*|*:/tmp)
+                log ERROR "hint: /tmp is restricted on Termux/Android -- use ~/ on the remote side" ;;
+            *)
+                log ERROR "hint: verify the remote destination exists and is writable by the remote user" ;;
+        esac
+        exit "$_scp_rc"
+    fi
 fi

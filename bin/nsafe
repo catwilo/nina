@@ -82,11 +82,11 @@ cmd_run() {
     # entero al timeout sin tocar otros procesos del shell padre.
     local _pid
     if command -v setsid >/dev/null 2>&1; then
-        setsid "$@" &
+        setsid "$@" <&0 &
         _pid=$!
     else
         # Fallback portable: arranca en background y registra el pid.
-        "$@" &
+        "$@" <&0 &
         _pid=$!
     fi
 
