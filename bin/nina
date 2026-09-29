@@ -139,17 +139,15 @@ _do_ssh_setup() {
     _alias="${1:-}"
     [ -n "$_alias" ] || { printf '[ERROR] usage: nina ssh-setup <alias>\n' >&2; exit 1; }
 
-    _db="$BASE/state/devices.db"
-    [ -f "$_db" ] || { log ERROR "devices database missing: $_db"; exit 1; }
-
     _db="$BASE/state/ts-devices.db"
-    [ -n "$_blk" ] || { log ERROR "unknown device alias: '$_alias'"; exit 1; }
+    [ -f "$_db" ] || { log ERROR "ts-devices.db missing: $_db"; exit 1; }
+
+    _blk="$(blockdb_get "$_db" alias "$_alias")"
 
     _ip="$(blockdb_field "$_blk" ip)"
     _user="$(blockdb_field "$_blk" user)"
     _port="$(blockdb_field "$_blk" port)"
-    [ -n "$_port" ] || _port=22
-    [ -n "$_user" ] || { log ERROR "no user set for '$_alias' — run nssh once to set it"; exit 1; }
+    [ -n "$_port" ] || _port=8022
 
     log INFO "ssh-setup: $_alias ($_user@$_ip:$_port)"
 
