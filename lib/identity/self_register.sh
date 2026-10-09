@@ -15,14 +15,18 @@ _self_register() {
     _self_alias=""
     _self_user=""
     _self_port=""
-    _self_platform=""
+    _self_os=""
+    _self_kind=""
+    _self_root=""
     if command -v node_registry_row >/dev/null 2>&1; then
         _self_row="$(node_registry_row 2>/dev/null)"
         if [ -n "$_self_row" ]; then
             _self_alias="$(blockdb_field "$_self_row" alias)"
             _self_user="$(blockdb_field "$_self_row" user)"
             _self_port="$(blockdb_field "$_self_row" port)"
-            _self_platform="$(blockdb_field "$_self_row" platform)"
+            _self_os="$(blockdb_field "$_self_row" os)"
+            _self_kind="$(blockdb_field "$_self_row" kind)"
+            _self_root="$(blockdb_field "$_self_row" root)"
         fi
     fi
     if [ -z "$_self_alias" ] && command -v _node_config_load >/dev/null 2>&1; then
@@ -51,7 +55,9 @@ _self_register() {
 
     _self_user="${_self_user:-u}"
     _self_port="${_self_port:-8022}"
-    _self_platform="${_self_platform:-android}"
+    _self_os="${_self_os:-$(detect_os 2>/dev/null || printf 'linux')}"
+    _self_kind="${_self_kind:-$(detect_kind 2>/dev/null || printf 'laptop')}"
+    _self_root="${_self_root:-no}"
 
     _self_tailscale_ip="$(detect_tailscale_ip 2>/dev/null || true)"
     if [ -z "$_self_tailscale_ip" ]; then
@@ -71,17 +77,17 @@ _self_register() {
 
     _ts_db="$BASE/state/ts-devices.db"
     [ -f "$_ts_db" ] || : > "$_ts_db"
-    _self_block_ts="$(printf "alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n" \
-        "$_self_alias" "$_self_tailscale_ip" "$_self_user" "$_self_port" "$_self_platform" "${_self_prev_hk:-}" "$(node_id)")"
+    _self_block_ts="$(printf "alias: %s\nip: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nnode_id: %s\n" \
+        "$_self_alias" "$_self_tailscale_ip" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" "${_self_prev_hk:-}" "$(node_id)")"
     blockdb_upsert "$_ts_db" alias "$_self_alias" "$_self_block_ts"
     log OK "self-registered $_self_alias ($_self_tailscale_ip)"
 
     if command -v node_alias_set >/dev/null 2>&1; then
-        node_alias_set "$_self_alias" "$_self_user" "$_self_port" "$_self_platform" || \
+        node_alias_set "$_self_alias" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" || \
             log WARN "node_alias_set failed -- registry.db not updated"
     fi
     if command -v _node_config_save >/dev/null 2>&1; then
-        _node_config_save "$_self_alias" "$_self_user" "$_self_port" || \
+        _node_config_save "$_self_alias" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" || \
             log WARN "_node_config_save failed"
     fi
     _SELF_REGISTER_DONE=1

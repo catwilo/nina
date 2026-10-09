@@ -38,23 +38,23 @@ resolve_device() {
     printf '%s|%s|%s\n' "$_ip" "${_user:-}" "$_port"
 }
 
-resolve_device_platform() {
+resolve_device_os() {
     _rdp_alias="$1"
     _rdp_dir="$2"
 
     if command -v registry_row_by_alias >/dev/null 2>&1; then
         _rdp_blk="$(registry_row_by_alias "$_rdp_alias")"
         if [ -n "$_rdp_blk" ]; then
-            _rdp_plat="$(blockdb_field "$_rdp_blk" platform)"
-            [ -n "$_rdp_plat" ] && { printf '%s\n' "$_rdp_plat"; return 0; }
+            _rdp_os="$(blockdb_field "$_rdp_blk" os)"
+            [ -n "$_rdp_os" ] && { printf '%s\n' "$_rdp_os"; return 0; }
         fi
     fi
     _rdp_db="$_rdp_dir/ts-devices.db"
     if [ -f "$_rdp_db" ]; then
         _rdp_blk="$(blockdb_get "$_rdp_db" alias "$_rdp_alias" 2>/dev/null || true)"
         if [ -n "$_rdp_blk" ]; then
-            _rdp_plat="$(blockdb_field "$_rdp_blk" platform)"
-            [ -n "$_rdp_plat" ] && { printf '%s\n' "$_rdp_plat"; return 0; }
+            _rdp_os="$(blockdb_field "$_rdp_blk" os)"
+            [ -n "$_rdp_os" ] && { printf '%s\n' "$_rdp_os"; return 0; }
         fi
     fi
     printf '\n'

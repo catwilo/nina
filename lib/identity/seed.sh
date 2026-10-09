@@ -34,14 +34,18 @@ _seed_from_registry() {
 
         _sfr_user="$(blockdb_field "$_sfr_reg_blk" user)"
         _sfr_port="$(blockdb_field "$_sfr_reg_blk" port)"
-        _sfr_platform="$(blockdb_field "$_sfr_reg_blk" platform)"
+        _sfr_os="$(blockdb_field "$_sfr_reg_blk" os)"
+        _sfr_kind="$(blockdb_field "$_sfr_reg_blk" kind)"
+        _sfr_root="$(blockdb_field "$_sfr_reg_blk" root)"
         _sfr_hk="$(blockdb_field "$_sfr_reg_blk" hostkey)"
         [ -n "$_sfr_user" ] || _sfr_user=u
         [ -n "$_sfr_port" ] || _sfr_port=8022
-        [ -n "$_sfr_platform" ] || _sfr_platform=android
+        [ -n "$_sfr_os" ] || _sfr_os=linux
+        [ -n "$_sfr_kind" ] || _sfr_kind=laptop
+        [ -n "$_sfr_root" ] || _sfr_root=no
 
-        _sfr_block="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n' \
-            "$_sfr_alias" "" "$_sfr_user" "$_sfr_port" "$_sfr_platform" "${_sfr_hk:-}" "$_sfr_nid")"
+        _sfr_block="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nnode_id: %s\n' \
+            "$_sfr_alias" "" "$_sfr_user" "$_sfr_port" "$_sfr_os" "$_sfr_kind" "$_sfr_root" "${_sfr_hk:-}" "$_sfr_nid")"
         blockdb_upsert "$_ts_db" alias "$_sfr_alias" "$_sfr_block"
         log OK "seeded $_sfr_alias (node $_sfr_nid, ip pending tailscale)"
     done < "$_sfr_nids"

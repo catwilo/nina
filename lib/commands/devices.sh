@@ -41,9 +41,9 @@ subcommands:
   rollback <alias>  restore ts-devices.db from snapshot
   push-vpn          sync ts-devices.db to all peers
   resetall          wipe ts-devices.db + known_hosts (requires y/N)
-  node-set <alias> [user] [port] [platform]  set THIS node identity
-  node-add <node-id> <alias> <user> <port> <platform>  register another node
-  registry-set <node-id> <alias> [user] [port] [platform]  edit any node
+  node-set <alias> [user] [port] [os] [kind] [root]  set THIS node identity
+  node-add <node-id> <alias> <user> <port> <os> <kind> <root>  register another node
+  registry-set <node-id> <alias> [user] [port] [os] [kind] [root]  edit any node
   hostkey-refresh   refresh SSH host keys from all devices
 USAGE
 }
@@ -72,12 +72,17 @@ _devices_list() {
         _user="$(blockdb_field "$_blk" user)"
         _port="$(blockdb_field "$_blk" port)"
         [ -n "$_port" ] || _port=8022
-        _platform="$(blockdb_field "$_blk" platform)"
-        [ -n "$_platform" ] || _platform="unknown"
+        _os="$(blockdb_field "$_blk" os)"
+        _kind="$(blockdb_field "$_blk" kind)"
+        _root="$(blockdb_field "$_blk" root)"
+        [ -n "$_os" ] || _os="unknown"
+        [ -n "$_kind" ] || _kind="unknown"
+        [ -n "$_root" ] || _root="unknown"
+        _type="$(platform_type "$_os")"
         _nid="$(blockdb_field "$_blk" node_id)"
         _marker=""
-        [ -n "$_me" ] && [ "$_alias" = "$_me" ] && _marker=" -- this is the local node"
-        printf 'alias=%s ip=%s user=%s port=%s platform=%s node_id=%s%s\n' "$_alias" "$_ip" "$_user" "$_port" "$_platform" "${_nid:-?}" "$_marker"
+        [ -n "$_me" ] && [ "$_alias" = "$_me" ] && _marker=" -- THIS IS THE LOCAL NODE: ${_alias}"
+        printf 'alias=%s ip=%s user=%s port=%s type=%s os=%s kind=%s root=%s node_id=%s%s\n' "$_alias" "$_ip" "$_user" "$_port" "$_type" "$_os" "$_kind" "$_root" "${_nid:-?}" "$_marker"
     done
 }
 
@@ -91,7 +96,7 @@ _devices_add() {
     _snap_path="$BASE/state/snapshots/${_alias}.bak"
     mkdir -p "$BASE/state/snapshots"
     [ -f "$_db" ] && cp -f "$_db" "$_snap_path"
-    _new="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: android\nhostkey: %s\nnode_id: %s\n' "$_alias" "$_ip" "$_user" "$_port" "" "")"
+    _new="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nos: android\nkind: phone\nroot: no\nhostkey: %s\nnode_id: %s\n' "$_alias" "$_ip" "$_user" "$_port" "" "")"
     blockdb_upsert "$_db" alias "$_alias" "$_new"
     log OK "registered '$_alias' ip=$_ip user=$_user port=$_port"
     if reachable_ssh "$_ip" "$_port"; then
@@ -120,8 +125,10 @@ _devices_edit() {
     _new_port="$(_prompt_field "port" "$_cur_port")"
     _cur_hk="$(blockdb_field "$_row" hostkey)"
     _cur_nid="$(blockdb_field "$_row" node_id)"
-    _cur_plat="$(blockdb_field "$_row" platform)"; _cur_plat="${_cur_plat:-android}"
-    _new="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nplatform: %s\nhostkey: %s\nnode_id: %s\n' "$_new_alias" "$_new_ip" "$_new_user" "$_new_port" "$_cur_plat" "${_cur_hk:-}" "${_cur_nid:-}")"
+    _cur_os="$(blockdb_field "$_row" os)"; _cur_os="${_cur_os:-linux}"
+    _cur_kind="$(blockdb_field "$_row" kind)"; _cur_kind="${_cur_kind:-laptop}"
+    _cur_root="$(blockdb_field "$_row" root)"; _cur_root="${_cur_root:-no}"
+    _new="$(printf 'alias: %s\nip: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nnode_id: %s\n' "$_new_alias" "$_new_ip" "$_new_user" "$_new_port" "$_cur_os" "$_cur_kind" "$_cur_root" "${_cur_hk:-}" "${_cur_nid:-}")"
     [ "$_new_alias" != "$_cur_alias" ] && blockdb_remove "$_db" alias "$_cur_alias"
     blockdb_upsert "$_db" alias "$_new_alias" "$_new"
     log OK "updated '$_alias' -> alias=$_new_alias ip=$_new_ip"
@@ -299,12 +306,14 @@ _devices_resetall() {
 }
 
 _devices_node_set() {
-    [ $# -ge 1 ] || { printf 'usage: nina devices node-set <alias> [user] [port] [platform]\n' >&2; exit 1; }
+    [ $# -ge 1 ] || { printf 'usage: nina devices node-set <alias> [user] [port] [os] [kind] [root]\n' >&2; exit 1; }
     _alias="$1"
     _user="${2:-u}"
     _port="${3:-8022}"
-    _platform="${4:-android}"
-    if node_alias_set "$_alias" "$_user" "$_port" "$_platform"; then
+    _os="${4:-$(detect_os 2>/dev/null || printf 'linux')}"
+    _kind="${5:-$(detect_kind 2>/dev/null || printf 'laptop')}"
+    _root="${6:-no}"
+    if node_alias_set "$_alias" "$_user" "$_port" "$_os" "$_kind" "$_root"; then
         log OK "node identity set: $_alias ($(node_id)) user=$_user port=$_port"
     else
         log WARN "node identity set failed"
@@ -312,12 +321,12 @@ _devices_node_set() {
 }
 
 _devices_node_add() {
-    [ $# -ge 5 ] || { printf 'usage: nina devices node-add <node-id> <alias> <user> <port> <platform>\n' >&2; exit 1; }
-    _nid="$1"; _alias="$2"; _user="$3"; _port="$4"; _platform="$5"
+    [ $# -ge 7 ] || { printf 'usage: nina devices node-add <node-id> <alias> <user> <port> <os> <kind> <root>\n' >&2; exit 1; }
+    _nid="$1"; _alias="$2"; _user="$3"; _port="$4"; _os="$5"; _kind="$6"; _root="$7"
     if [ -f "$REGISTRY_DB" ] && [ -n "$(blockdb_get "$REGISTRY_DB" node_id "$_nid")" ]; then
         log ERROR "node-id '$_nid' already registered"; exit 1
     fi
-    if _registry_write "$_nid" "$_alias" "$_user" "$_port" "$_platform"; then
+    if _registry_write "$_nid" "$_alias" "$_user" "$_port" "$_os" "$_kind" "$_root"; then
         log OK "node added: $_alias ($_nid)"
     else
         log WARN "node add failed: $_alias ($_nid)"
@@ -325,9 +334,9 @@ _devices_node_add() {
 }
 
 _devices_registry_set() {
-    [ $# -ge 2 ] || { printf 'usage: nina devices registry-set <node-id> <alias> [user] [port] [platform]\n' >&2; exit 1; }
-    _rs_nid="$1"; _rs_alias="$2"; _rs_user="${3:-u}"; _rs_port="${4:-8022}"; _rs_platform="${5:-android}"
-    if _registry_write "$_rs_nid" "$_rs_alias" "$_rs_user" "$_rs_port" "$_rs_platform"; then
+    [ $# -ge 2 ] || { printf 'usage: nina devices registry-set <node-id> <alias> [user] [port] [os] [kind] [root]\n' >&2; exit 1; }
+    _rs_nid="$1"; _rs_alias="$2"; _rs_user="${3:-u}"; _rs_port="${4:-8022}"; _rs_os="${5:-linux}"; _rs_kind="${6:-laptop}"; _rs_root="${7:-no}"
+    if _registry_write "$_rs_nid" "$_rs_alias" "$_rs_user" "$_rs_port" "$_rs_os" "$_rs_kind" "$_rs_root"; then
         log OK "registry updated: $_rs_alias ($_rs_nid)"
     else
         log WARN "registry update failed: $_rs_alias ($_rs_nid)"

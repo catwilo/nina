@@ -17,7 +17,10 @@ _prompt_self_identity() {
     done
     _psi_user="u"
     _psi_port="8022"
-    if node_alias_set "$_psi_alias" "$_psi_user" "$_psi_port" android; then
+    _psi_os="$(detect_os 2>/dev/null || printf 'linux')"
+    _psi_kind="$(detect_kind 2>/dev/null || printf 'laptop')"
+    _psi_root="no"
+    if node_alias_set "$_psi_alias" "$_psi_user" "$_psi_port" "$_psi_os" "$_psi_kind" "$_psi_root"; then
         printf "%s\n" "$_psi_alias"
         return 0
     fi

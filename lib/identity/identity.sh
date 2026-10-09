@@ -93,15 +93,15 @@ _node_config_load() {
 # mkit's atomic flow. Best-effort: a failure here does not block the
 # master-registry write, only the local offline fallback.
 _node_config_save() {
-    _ncs_alias="$1"; _ncs_user="$2"; _ncs_port="$3"
-    [ -n "$_ncs_alias" ] && [ -n "$_ncs_user" ] && [ -n "$_ncs_port" ] || {
-        printf '[ERROR] _node_config_save: alias, user and port are required\n' >&2
+    _ncs_alias="$1"; _ncs_user="$2"; _ncs_port="$3"; _ncs_os="$4"; _ncs_kind="$5"; _ncs_root="$6"
+    [ -n "$_ncs_alias" ] && [ -n "$_ncs_user" ] && [ -n "$_ncs_port" ] && [ -n "$_ncs_os" ] && [ -n "$_ncs_kind" ] && [ -n "$_ncs_root" ] || {
+        printf '[ERROR] _node_config_save: alias, user, port, os, kind and root are required\n' >&2
         return 1
     }
     _ncs_dir="$(dirname "$NODE_CONFIG")"
     mkdir -p "$_ncs_dir" 2>/dev/null || true
     _ncs_tmp="$(mktemp "${TMPDIR:-/tmp}/node-config.XXXXXX")"
-    printf '%s|%s|%s\n' "$_ncs_alias" "$_ncs_user" "$_ncs_port" > "$_ncs_tmp"
+    printf '%s|%s|%s|%s|%s|%s\n' "$_ncs_alias" "$_ncs_user" "$_ncs_port" "$_ncs_os" "$_ncs_kind" "$_ncs_root" > "$_ncs_tmp"
     mkit write "$NODE_CONFIG" "$_ncs_tmp" || {
         rm -f "$_ncs_tmp"
         printf '[ERROR] _node_config_save: mkit write failed\n' >&2
@@ -253,6 +253,39 @@ is_local_ip() {
 # node_id -- the canonical 16-hex identifier for this device.
 node_id() {
     _machine_seed | _sha256 | cut -c1-16
+}
+
+# detect_os -- best-effort OS slug for this node.
+detect_os() {
+    case "${PREFIX:-}" in
+        */com.termux/*) printf 'android'; return 0 ;;
+    esac
+    case "$(uname -s 2>/dev/null)" in
+        Darwin) printf 'macos'; return 0 ;;
+    esac
+    if [ -f /etc/arch-release ]; then
+        printf 'arch'
+    elif [ -f /etc/debian_version ]; then
+        printf 'debian'
+    else
+        printf 'linux'
+    fi
+}
+
+# detect_kind -- best-effort device kind slug for this node.
+detect_kind() {
+    case "$(detect_os)" in
+        android|ios) printf 'phone' ;;
+        *) printf 'laptop' ;;
+    esac
+}
+
+# platform_type OS -- derive display type (celular/computador) from os slug.
+platform_type() {
+    case "${1:-}" in
+        android|ios) printf 'celular' ;;
+        *)           printf 'computador' ;;
+    esac
 }
 
 # node_alias -- canonical alias for this node from the master registry, or empty.
