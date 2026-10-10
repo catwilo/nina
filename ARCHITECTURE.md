@@ -29,7 +29,7 @@ cloud). Single source for peers and their IPs: local `ts-devices.db`.
     lib/identity/identity.sh        node_id, machine_seed, tailscale detection
     lib/identity/registry.sh        _registry_write, node_alias_set, lookups
     lib/identity/self_register.sh   _self_register + _registry_pull_latest
-    lib/identity/seed.sh            _seed_from_registry
+    lib/identity/seed.sh            _seed_from_registry (pulls registry first)
     lib/identity/prompt.sh          _prompt_self_identity
 
     lib/commands/devices.sh         nina devices
@@ -58,6 +58,11 @@ cloud). Single source for peers and their IPs: local `ts-devices.db`.
   for a name only if both are absent, then writes to `ts-devices.db` with the
   tailscale IP from `detect_tailscale_ip`, and populates hostkey via
   `_get_host_key_fingerprint 127.0.0.1 <port>`.
+
+- `_seed_from_registry` runs `git pull --rebase origin main` on
+  `~/.nina-registry` before reading `registry.db`. Without the pull, seed
+  sees a stale copy and silently skips nodes registered by another host
+  since the last refresh.
 
 ## Clip
 
