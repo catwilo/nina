@@ -115,8 +115,12 @@ cmd_run() {
     # Limpia el vigilante si sigue vivo.
     kill "$_watcher_pid" 2>/dev/null || true
 
-    # Cleanup de huerfanos: cualquier pid registrado en el state dir.
-    _nsafe_cleanup_all
+    # Remove only our own state file. NEVER sweep the whole directory:
+    # two nsafe processes running in parallel would kill each other's
+    # children as soon as either one finished. Orphan cleanup after a
+    # timeout is handled by the watcher above; the `cleanup` subcommand
+    # remains available for manual recovery.
+    rm -f "$_state_file"
 
     # Si el proceso termino por timeout, devolver 124 (convencion timeout(1)).
     # Deteccion: el proceso murio por SIGKILL/SIGTERM justo en el limite.
