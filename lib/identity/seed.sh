@@ -2,6 +2,13 @@
 # seed.sh -- pull other nodes rows from the cloud registry into ts-devices.db.
 
 _seed_from_registry() {
+    # Refresh the cloud registry before reading it. Without this, seed
+    # sees a stale registry.db and silently skips nodes registered by
+    # another host since the last pull. Same behaviour as self_register.
+    if [ -d "$HOME/.nina-registry/.git" ]; then
+        ( cd "$HOME/.nina-registry" && git pull --rebase origin main >/dev/null 2>&1 ) || true
+    fi
+
     [ -f "$REGISTRY_DB" ] || return 0
     _ts_db="$BASE/state/ts-devices.db"
     [ -f "$_ts_db" ] || : > "$_ts_db"
