@@ -101,7 +101,20 @@ _user="$(_ensure_user "$_name" "$DB" "$_user")"
 # "interactive" when the caller hasn't already set a role (e.g.
 # ssh_key_bootstrap/ndevs export "automation" before invoking nssh as an
 # internal subroutine -- that value must survive, not be overwritten).
-: "${NOEMAP_SSH_ROLE:=interactive}"
+#
+# When nssh is about to wrap ssh in nsafe (no TTY, or --safe forced),
+# the role MUST be "transfer": "interactive" activates ControlMaster
+# auto, and ssh would then wait on the persistent socket for
+# ControlPersist (10m) after the remote command finished. nsafe times
+# out at 60s and kills the socket, reporting rc=124 even though the
+# remote command already succeeded. "transfer" disables ControlMaster
+# (see config/ssh_config), so ssh exits as soon as the remote command
+# returns.
+if [ "$_use_nsafe" -eq 1 ]; then
+    : "${NOEMAP_SSH_ROLE:=transfer}"
+else
+    : "${NOEMAP_SSH_ROLE:=interactive}"
+fi
 export NOEMAP_SSH_ROLE
 
 
