@@ -336,6 +336,47 @@ fi
 #      command to run once (first-time bootstrap of a new node).
 #   4. Verify the handshake to each node and report OK / needs-setup.
 # ---------------------------------------------------------------------------
+# _ensure_nya -- garantiza que nya este disponible antes del bootstrap de
+# claves. nya es dependencia runtime de nina (toda comunicacion remota pasa
+# por ella desde la purga de nssh/nscp). Si nya no esta en PATH, clona el
+# repo desde GitHub en $TOOLS_DIR y corre su install.sh.
+#
+# Idempotente: si nya ya esta, no hace nada. Silencioso en exito.
+# ---------------------------------------------------------------------------
+_ensure_nya() {
+    if has nya; then
+        log INFO "nya already installed"
+        return 0
+    fi
+
+    log INFO "nya not found -- installing (dependency for remote calls)"
+    _nya_tools_dir="${TOOLS_DIR:-$HOME/unix-toolkit-tools}"
+    _nya_repo="$_nya_tools_dir/nya"
+
+    if [ -d "$_nya_repo/.git" ]; then
+        log INFO "nya repo already cloned at $_nya_repo -- pulling"
+        git -C "$_nya_repo" pull --rebase origin main >/dev/null 2>&1 \
+            || log WARN "nya pull failed -- continuing with current checkout"
+    else
+        log INFO "cloning nya into $_nya_repo"
+        mkdir -p "$_nya_tools_dir"
+        git clone git@github.com:catwilo/nya.git "$_nya_repo" >/dev/null 2>&1 \
+            || { log ERROR "nya clone failed -- install it manually: git clone git@github.com:catwilo/nya.git $_nya_repo && bash $_nya_repo/install.sh"; return 1; }
+    fi
+
+    if [ -x "$_nya_repo/install.sh" ]; then
+        bash "$_nya_repo/install.sh" >/dev/null 2>&1 \
+            || { log ERROR "nya install.sh failed -- run manually: bash $_nya_repo/install.sh"; return 1; }
+    else
+        log ERROR "nya install.sh not found at $_nya_repo/install.sh"
+        return 1
+    fi
+
+    has nya || { log ERROR "nya still not in PATH after install"; return 1; }
+    log OK "nya installed"
+}
+
+# ---------------------------------------------------------------------------
 ssh_key_bootstrap() {
     # Internal calls: never prompt for a password, fail fast instead
     # (ssh_config's automation Match block enforces BatchMode yes here).
@@ -361,7 +402,7 @@ ssh_key_bootstrap() {
 
     _devdb="$STATEDIR/devices.db"
     [ -f "$_devdb" ] && [ -s "$_devdb" ] || { log INFO "no nodes registered -- key distribution skipped"; return 0; }
-    has "$BINDIR/nya" || command -v nya >/dev/null 2>&1 || { log INFO "nya unavailable -- key distribution skipped"; return 0; }
+    _ensure_nya || { log WARN "nya unavailable -- key distribution skipped"; return 0; }
 
     # blockdb.sh must load before identity.sh, which calls blockdb_get/
     # blockdb_field internally.
