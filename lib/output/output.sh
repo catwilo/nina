@@ -63,6 +63,6 @@ render_connect() {
     printf "  %-12s  %s\n" "cmd"       "nya $_ex uname -a"
     printf "  %-12s  %s\n" "copy from" "nya $_ex:/remote/path ./"
     printf "  %-12s  %s\n" "copy to"   "nya ./file $_ex:/remote/"
-    printf "  %-12s  %s\n" "clipboard" "nina clip get $_ex:/remote/file"
+    printf "  %-12s  %s\n" "clipboard" "nya clip get $_ex:/remote/file"
     printf '\n'
 }

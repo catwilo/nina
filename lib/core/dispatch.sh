@@ -21,7 +21,6 @@ subcommands:
   push            sync ts-devices.db to all registered peers
   status          list devices and mark the local node
   devices         manage registered devices
-  clip            clipboard forwarding
   resolve         emit "alias ip user port" per line (machine-readable)
   all             run the full pipeline (default)
 
@@ -33,7 +32,7 @@ USAGE
 nina_dispatch() {
     _sub="${1:-all}"
     case "$_sub" in
-        self-register|seed|bootstrap-keys|push|status|devices|clip|resolve|all) shift || true ;;
+        self-register|seed|bootstrap-keys|push|status|devices|resolve|all) shift || true ;;
         -h|--help) _print_help; exit 0 ;;
         *) _dispatch_usage >&2; exit 1 ;;
     esac
@@ -48,7 +47,6 @@ nina_dispatch() {
         push)           _do_push ;;
         status)         _do_status ;;
         devices)        _do_devices "$@" ;;
-        clip)           _do_clip "$@" ;;
         resolve)        _do_resolve "$@" ;;
         all)            _do_all ;;
     esac

@@ -38,14 +38,6 @@ All commands accept `-h`.
 - `nina devices registry-set <node-id> <alias> [user] [port] [platform]`
 - `nina devices hostkey-refresh`
 
-### Clip
-
-- `nina clip get <alias>:/path`
-- `nina clip send [--ssh] <alias>`
-- `nina clip set|clear|status`
-- `nina clip tunnel <start|stop|restart|status>`
-- `nina clip serve  <start|stop|restart|status>`
-
 ### Remote execution
 
 Nina does not ship remote-execution tools. Use `nya` (separate repo):

@@ -53,16 +53,6 @@
 
   CLIP (clipboard forwarding, tmux-backed)
 
-    nina clip get <alias>:/remote/path   Copy remote file to local clipboard.
-    nina clip send [--ssh] <alias>       Send stdin to remote clipboard.
-    nina clip set <src> <dst>            Define direction + smoke-test.
-    nina clip clear                      Clear direction config.
-    nina clip status                     Show direction config.
-    nina clip tunnel <start|stop|restart|status>
-                                         Unix socket listener (SSH RemoteForward).
-    nina clip serve  <start|stop|restart|status>
-                                         TCP listener (ncat, port 9988).
-
   ─────────────────────────────────────────────────────────────────────
 
   NOTES

@@ -15,7 +15,7 @@ cloud). Single source for peers and their IPs: local `ts-devices.db`.
 
 ## Module map
 
-    bin/nina                 entry point (dispatch + ssh-setup + client-setup)
+    bin/nina                 entry point (dispatch + ssh-setup)
     bin/_bootstrap           shared self/data resolution + _source_mods
 
     lib/core/util.sh         log, has_cmd, session, atomic_write, dirs
@@ -32,10 +32,9 @@ cloud). Single source for peers and their IPs: local `ts-devices.db`.
     lib/identity/prompt.sh          _prompt_self_identity
 
     lib/commands/devices.sh         nina devices
-    lib/commands/clip.sh            nina clip
     lib/commands/discovery.sh       nina {all, self-register, seed, push}
 
-    lib/connection/devices.sh       resolve_device, resolve_scp_target
+    lib/connection/devices.sh       resolve_device
     lib/connection/sync.sh          sync_devices_to_nodes
     lib/connection/ssh_bootstrap.sh ssh_key_bootstrap
 
@@ -62,13 +61,6 @@ cloud). Single source for peers and their IPs: local `ts-devices.db`.
   `~/.nina-registry` before reading `registry.db`. Without the pull, seed
   sees a stale copy and silently skips nodes registered by another host
   since the last refresh.
-
-## Clip
-
-Two independent mechanisms:
-- `clip tunnel` — Unix socket via SSH RemoteForward, started/stopped around
-  interactive `nya` sessions.
-- `clip serve`  — TCP listener (`ncat`, port 9988), independent of SSH.
 
 ## Deploy
 
