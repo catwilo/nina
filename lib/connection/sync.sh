@@ -2,7 +2,6 @@
 # sync.sh -- push ts-devices.db to every registered peer over tailscale.
 
 sync_devices_to_nodes() {
-    export NOEMAP_SSH_ROLE=automation
     _self_register
 
     _ts_db="$BASE/state/ts-devices.db"

@@ -378,9 +378,8 @@ _ensure_nya() {
 
 # ---------------------------------------------------------------------------
 ssh_key_bootstrap() {
-    # Internal calls: never prompt for a password, fail fast instead
-    # (ssh_config's automation Match block enforces BatchMode yes here).
-    export NOEMAP_SSH_ROLE=automation
+    # Internal calls: never prompt for a password (nya usa BatchMode=yes
+    # por default en sus invocaciones ssh).
 
     _key="$HOME/.ssh/id_ed25519"
     _pub="$_key.pub"

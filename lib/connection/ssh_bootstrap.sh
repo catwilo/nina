@@ -2,8 +2,6 @@
 # ssh_bootstrap.sh -- distribute SSH pubkey to every registered tailscale peer.
 
 ssh_key_bootstrap() {
-    export NOEMAP_SSH_ROLE=automation
-
     _key="$HOME/.ssh/id_ed25519"
     _pub="$_key.pub"
     mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
