@@ -2,17 +2,33 @@
 # devices.sh -- nina devices subcommand (tailscale-only).
 
 # ---------------------------------------------------------------------------
-# _do_resolve [<alias>...] -- emite "alias ip user port" por linea.
+# ---------------------------------------------------------------------------
+# _do_resolve [--include-self] [<alias>...]
 #
-# Contrato de maquina para consumidores externos (ej. nya). Sin
-# argumentos, imprime todos los nodos. Con argumentos, filtra a esos
-# aliases exactos (los desconocidos se omiten silenciosamente).
+# Emite "alias ip user port" por linea, un nodo por linea.
 #
-# NO es lo mismo que 'nina status' (que es para humanos). El formato
-# de este subcomando es estable y parseable: campos separados por
-# espacio simple, sin colores, sin encabezados.
+# Contrato de maquina para consumidores externos (ej. nya). El formato
+# es estable y parseable: campos separados por espacio simple, sin
+# colores, sin encabezados.
+#
+# Por DEFAULT excluye el nodo local: quien consume esta salida (nya,
+# distribucion, sync) quiere contactar OTROS nodos, no a si mismo por
+# SSH. Incluirse es el caso raro, y se pide explicito con --include-self.
+#
+# Sin argumentos de filtro: todos los nodos remotos.
+# Con argumentos <alias>...: solo esos (los desconocidos se omiten).
 # ---------------------------------------------------------------------------
 _do_resolve() {
+    _include_self=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --include-self) _include_self=1; shift ;;
+            --) shift; break ;;
+            -*) printf '[ERROR] _do_resolve: unknown flag: %s\n' "$1" >&2; return 2 ;;
+            *) break ;;
+        esac
+    done
+
     _db="$BASE/state/ts-devices.db"
     if [ ! -f "$_db" ] || [ ! -s "$_db" ]; then
         return 0
@@ -21,18 +37,18 @@ _do_resolve() {
     if [ "$#" -eq 0 ]; then
         _resolve_filter=""
     else
-        # Construir un patron ERE "^(a|b|c)$" a partir de los args.
         _resolve_filter=""
         for _arg in "$@"; do
             [ -n "$_resolve_filter" ] && _resolve_filter="$_resolve_filter|"
-            # Escapar caracteres especiales de ERE que puedan venir en
-            # un alias (por las dudas).
             _esc="$(printf '%s' "$_arg" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
             _resolve_filter="${_resolve_filter}${_esc}"
         done
     fi
 
-    awk -v filter="$_resolve_filter" '
+    # Alias del nodo local (vacio si no esta registrado).
+    _self_alias="$(node_alias 2>/dev/null || printf '')"
+
+    awk -v filter="$_resolve_filter" -v self_alias="$_self_alias" -v include_self="$_include_self" '
         BEGIN { RS=""; FS="\n" }
         {
             alias_v=""; ip_v=""; user_v=""; port_v=""
@@ -47,8 +63,10 @@ _do_resolve() {
                 else if (k == "port") port_v = v
             }
             if (alias_v == "") next
+
+            if (include_self == "0" && self_alias != "" && alias_v == self_alias) next
+
             if (filter != "") {
-                # Filtro: solo los aliases exactos pedidos.
                 n = split(filter, fa, "|")
                 match_found = 0
                 for (j = 1; j <= n; j++) {
