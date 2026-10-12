@@ -1,6 +1,66 @@
 #!/bin/sh
 # devices.sh -- nina devices subcommand (tailscale-only).
 
+# ---------------------------------------------------------------------------
+# _do_resolve [<alias>...] -- emite "alias ip user port" por linea.
+#
+# Contrato de maquina para consumidores externos (ej. nya). Sin
+# argumentos, imprime todos los nodos. Con argumentos, filtra a esos
+# aliases exactos (los desconocidos se omiten silenciosamente).
+#
+# NO es lo mismo que 'nina status' (que es para humanos). El formato
+# de este subcomando es estable y parseable: campos separados por
+# espacio simple, sin colores, sin encabezados.
+# ---------------------------------------------------------------------------
+_do_resolve() {
+    _db="$BASE/state/ts-devices.db"
+    if [ ! -f "$_db" ] || [ ! -s "$_db" ]; then
+        return 0
+    fi
+
+    if [ "$#" -eq 0 ]; then
+        _resolve_filter=""
+    else
+        # Construir un patron ERE "^(a|b|c)$" a partir de los args.
+        _resolve_filter=""
+        for _arg in "$@"; do
+            [ -n "$_resolve_filter" ] && _resolve_filter="$_resolve_filter|"
+            # Escapar caracteres especiales de ERE que puedan venir en
+            # un alias (por las dudas).
+            _esc="$(printf '%s' "$_arg" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+            _resolve_filter="${_resolve_filter}${_esc}"
+        done
+    fi
+
+    awk -v filter="$_resolve_filter" '
+        BEGIN { RS=""; FS="\n" }
+        {
+            alias_v=""; ip_v=""; user_v=""; port_v=""
+            for (i = 1; i <= NF; i++) {
+                colon = index($i, ":")
+                if (colon == 0) continue
+                k = substr($i, 1, colon - 1)
+                v = substr($i, colon + 2)
+                if (k == "alias") alias_v = v
+                else if (k == "ip") ip_v = v
+                else if (k == "user") user_v = v
+                else if (k == "port") port_v = v
+            }
+            if (alias_v == "") next
+            if (filter != "") {
+                # Filtro: solo los aliases exactos pedidos.
+                n = split(filter, fa, "|")
+                match_found = 0
+                for (j = 1; j <= n; j++) {
+                    if (fa[j] == alias_v) { match_found = 1; break }
+                }
+                if (!match_found) next
+            }
+            printf "%s %s %s %s\n", alias_v, ip_v, user_v, port_v
+        }
+    ' "$_db"
+}
+
 _do_devices() {
     _dev_sub="${1:-list}"
     case "$_dev_sub" in
