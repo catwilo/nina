@@ -46,11 +46,12 @@ All commands accept `-h`.
 - `nina clip tunnel <start|stop|restart|status>`
 - `nina clip serve  <start|stop|restart|status>`
 
-### Standalone wrappers
+### Remote execution
 
-- `nssh <alias> [cmd...]`
-- `nscp [-r] <src> <dst>`
-- `nsafe run -- <cmd...>`
+Nina does not ship remote-execution tools. Use `nya` (separate repo):
+- `nya <alias> [cmd...]`  (was `nssh`)
+- `nya <src> <alias>:<dst>` / `nya <alias>:<src> <dst>`  (was `nscp`)
+- `nya --safe run ...`  (was `nsafe`)
 
 ## Identity
 

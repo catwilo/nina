@@ -21,7 +21,7 @@ ssh_key_bootstrap() {
 
     _ts_db="$BASE/state/ts-devices.db"
     [ -f "$_ts_db" ] && [ -s "$_ts_db" ] || { log INFO "no peers registered"; return 0; }
-    has_cmd nssh || { log INFO "nssh unavailable"; return 0; }
+    has_cmd nya || { log INFO "nya unavailable"; return 0; }
 
     _pubdata="$(cat "$_pub")"
     _my_alias="$(node_alias 2>/dev/null || true)"
@@ -40,11 +40,11 @@ ssh_key_bootstrap() {
     printf '%s\n' "$_aliases" | while IFS= read -r _ka; do
         [ -n "$_ka" ] || continue
         [ "$_ka" = "$_my_alias" ] && continue
-        if nssh "$_ka" "true" </dev/null >/dev/null 2>&1; then
-            nssh "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
+        if nya "$_ka" "true" </dev/null >/dev/null 2>&1; then
+            nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
                 && log OK "key ensured on $_ka" \
                 || log WARN "key append to $_ka failed"
-            _remote_pub="$(nssh "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
+            _remote_pub="$(nya "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
             if [ -n "$_remote_pub" ]; then
                 mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
                 grep -qxF "$_remote_pub" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_remote_pub" >> ~/.ssh/authorized_keys

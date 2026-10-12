@@ -1,14 +1,14 @@
-# noemap ssh_config
+# nina ssh_config
 #
 # Security note: StrictHostKeyChecking is set to accept-new, which silently
 # accepts new host keys on first connection. This is suitable for trusted
 # home/lab networks. On untrusted networks, change to "yes" and pre-populate
 # UserKnownHostsFile with known host fingerprints.
 #
-# ControlMaster notes:
-#   - nssh uses ControlMaster auto for connection multiplexing convenience.
-#   - nscp explicitly disables it (ControlMaster=no via Match) to
-#     prevent hangs in non-interactive contexts if the master socket is slow.
+# This file is passed to ssh with -F when nina itself opens a connection
+# (bootstrap-keys, registry propagation). Interactive and transfer sessions
+# now live in `nya`; nya manages its own ssh options and does not consume
+# this file.
 
 # Defaults for all hosts
 Host *
@@ -20,25 +20,7 @@ Host *
     UserKnownHostsFile ~/.local/share/noemap/known_hosts
     ControlPath ~/.ssh/noemap-%r@%h:%p
     ControlPersist 10m
-
-# nssh — interactive sessions benefit from multiplexing
-# (nssh sets NOEMAP_SSH_ROLE=interactive before exec'ing ssh)
-Match exec "[ \"${NOEMAP_SSH_ROLE:-}\" = 'interactive' ]"
-    ControlMaster auto
-
-# nscp / nrsync — non-interactive; never be a master, never wait for one
-# (these tools set NOEMAP_SSH_ROLE=transfer before exec'ing ssh/rsync)
-Match exec "[ \"${NOEMAP_SSH_ROLE:-}\" = 'transfer' ]"
-    ControlMaster no
-
-# nssh/ndevs internal calls (registry/key propagation) -- never prompt for
-# password; fail fast instead of hanging when a node lacks a key yet.
-# (callers set NOEMAP_SSH_ROLE=automation before exec'ing ssh, same pattern
-# as transfer above -- interactive nssh usage by a human is unaffected)
-Match exec "[ \"${NOEMAP_SSH_ROLE:-}\" = 'automation' ]"
     BatchMode yes
-    ControlMaster no
-    ControlPath none
 
 # User per-host overrides (RemoteForward, IdentityFile, etc.)
 Include ~/.ssh/config

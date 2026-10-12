@@ -56,5 +56,5 @@ ensure_dirs() {
 
 validate_env() {
     for _cmd in awk sed grep cut ssh; do require_cmd "$_cmd"; done
-    if ! has_cmd scp; then log WARN "scp not found -- nscp unavailable"; fi
+    if ! has_cmd scp; then log WARN "scp not found -- transferencia directa no disponible"; fi
 }

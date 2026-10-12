@@ -16,7 +16,6 @@ cloud). Single source for peers and their IPs: local `ts-devices.db`.
 ## Module map
 
     bin/nina                 entry point (dispatch + ssh-setup + client-setup)
-    bin/nssh  bin/nscp  bin/nsafe   standalone wrappers
     bin/_bootstrap           shared self/data resolution + _source_mods
 
     lib/core/util.sh         log, has_cmd, session, atomic_write, dirs
@@ -68,7 +67,7 @@ cloud). Single source for peers and their IPs: local `ts-devices.db`.
 
 Two independent mechanisms:
 - `clip tunnel` — Unix socket via SSH RemoteForward, started/stopped around
-  interactive `nssh` sessions.
+  interactive `nya` sessions.
 - `clip serve`  — TCP listener (`ncat`, port 9988), independent of SSH.
 
 ## Deploy

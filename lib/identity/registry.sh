@@ -132,7 +132,7 @@ registry_row_by_hostkey() {
 _distribute_registry() {
     _dr_devdb="$BASE/state/ts-devices.db"
     [ -f "$REGISTRY_DB" ] || return 0
-    has_cmd nssh || { log WARN "nssh not found -- registry not distributed"; return 0; }
+    has_cmd nya || { log WARN "nya not found -- registry not distributed"; return 0; }
     [ -f "$_dr_devdb" ] || return 0
     _dr_local_head="$(cd "$(dirname "$REGISTRY_DB")" 2>/dev/null && git rev-parse HEAD 2>/dev/null)"
     _my_alias="$(node_alias 2>/dev/null || printf '')"
@@ -160,7 +160,7 @@ _distribute_registry() {
             log WARN "registry -> $_na skipped (unreachable: $_nip:$_nport)"
             continue
         fi
-        _dr_remote_head="$(nssh "$_na" "cd ~/.nina-registry 2>/dev/null && git pull --rebase origin main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null)"
+        _dr_remote_head="$(nya "$_na" "cd ~/.nina-registry 2>/dev/null && git pull --rebase origin main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null)"
         if [ -z "$_dr_remote_head" ]; then
             log WARN "registry pull on $_na failed"
             continue

@@ -59,10 +59,10 @@ render_connect() {
     ' "$_ts_db")"
     _ex="${_ex:-<alias>}"
     printf "${_C_BOLD}${_C_CYAN}  CONNECT${_C_RESET}  ${_C_DIM}(replace %s with any alias)${_C_RESET}\n\n" "$_ex"
-    printf "  %-12s  %s\n" "shell"     "nssh $_ex"
-    printf "  %-12s  %s\n" "cmd"       "nssh $_ex uname -a"
-    printf "  %-12s  %s\n" "copy from" "nscp $_ex:/remote/path ./"
-    printf "  %-12s  %s\n" "copy to"   "nscp ./file $_ex:/remote/"
+    printf "  %-12s  %s\n" "shell"     "nya $_ex"
+    printf "  %-12s  %s\n" "cmd"       "nya $_ex uname -a"
+    printf "  %-12s  %s\n" "copy from" "nya $_ex:/remote/path ./"
+    printf "  %-12s  %s\n" "copy to"   "nya ./file $_ex:/remote/"
     printf "  %-12s  %s\n" "clipboard" "nina clip get $_ex:/remote/file"
     printf '\n'
 }

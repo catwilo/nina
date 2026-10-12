@@ -335,7 +335,7 @@ _devices_rollback() {
 _devices_push_vpn() {
     _db="$BASE/state/ts-devices.db"
     [ -f "$_db" ] || { printf '[INFO] no devices registered\n' >&2; exit 0; }
-    has_cmd nscp || { log ERROR "nscp not found"; exit 1; }
+    has_cmd nya || { log ERROR "nya not found"; exit 1; }
     _remote_path="$HOME/.local/share/nina/state/ts-devices.db"
     _aliases="$(awk '
         BEGIN { RS=""; FS="\n" }
@@ -359,7 +359,7 @@ _devices_push_vpn() {
         [ -n "$_port" ] || _port=8022
         [ -n "$_ip" ] || { log WARN "push to $_alias skipped (no ip)"; continue; }
         if reachable_ssh "$_ip" "$_port"; then
-            if nscp "$_db" "${_alias}:${_remote_path}" >/dev/null 2>&1; then
+            if nya "$_db" "${_alias}:${_remote_path}" >/dev/null 2>&1; then
                 log OK "pushed ts-devices.db -> $_alias ($_ip)"
             else
                 log WARN "push to $_alias ($_ip) failed"

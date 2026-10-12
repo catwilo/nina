@@ -246,7 +246,7 @@ has nmap || {
     # Verify nmap is now available
     has nmap || fail "nmap still not found after install attempt"
 }
-has scp   || log WARN "scp not found  nscp unavailable"
+has scp   || log WARN "scp not found  transferencia directa no disponible"
 has ncat || {
     log WARN "ncat not found  nclip TCP listener unavailable"
 
@@ -327,7 +327,7 @@ fi
 # ---------------------------------------------------------------------------
 # SSH key bootstrap (nina#15)
 #   1. Generate ~/.ssh/id_ed25519 (no passphrase) if missing -- required for
-#      non-interactive nssh between nodes. No passphrase by design: these keys
+#      non-interactive nya between nodes. No passphrase by design: these keys
 #      are used by automation, an agent prompt would break the unattended flow.
 #   2. Distribute our public key to every node reachable WITHOUT a password
 #      (reuse the already-trusted SSH channel). Idempotent append to the
@@ -361,7 +361,7 @@ ssh_key_bootstrap() {
 
     _devdb="$STATEDIR/devices.db"
     [ -f "$_devdb" ] && [ -s "$_devdb" ] || { log INFO "no nodes registered -- key distribution skipped"; return 0; }
-    has "$BINDIR/nssh" || command -v nssh >/dev/null 2>&1 || { log INFO "nssh unavailable -- key distribution skipped"; return 0; }
+    has "$BINDIR/nya" || command -v nya >/dev/null 2>&1 || { log INFO "nya unavailable -- key distribution skipped"; return 0; }
 
     # blockdb.sh must load before identity.sh, which calls blockdb_get/
     # blockdb_field internally.
@@ -378,7 +378,7 @@ ssh_key_bootstrap() {
 
     _pubdata="$(cat "$_pub")"
     _need_manual=""
-    # iterate registered aliases (skip self handled by nssh/devices content)
+    # iterate registered aliases (skip self handled by nya/devices content)
     _skb_aliases1="$(blockdb_list "$_devdb" | awk '
         BEGIN { RS=""; FS="\n" }
         {
@@ -397,15 +397,15 @@ ssh_key_bootstrap() {
         _kip="$(blockdb_field "$_skb_blk1" ip)"
         if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_kip"; then continue; fi
         # reachable passwordless? (BatchMode: never prompts)
-        if nssh "$_ka" "true" </dev/null >/dev/null 2>&1; then
+        if nya "$_ka" "true" </dev/null >/dev/null 2>&1; then
             # idempotent append: only add if not already present
-            nssh "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
+            nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
                 && log OK "key ensured on $_ka" \
                 || log WARN "key append to $_ka failed"
 
             # Bidirectional: fetch remote's public key and add to LOCAL
             # authorized_keys so the remote can reach us without password.
-            _remote_pub="$(nssh "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
+            _remote_pub="$(nya "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
             if [ -n "$_remote_pub" ]; then
                 mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
                 grep -qxF "$_remote_pub" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_remote_pub" >> ~/.ssh/authorized_keys
@@ -443,7 +443,7 @@ EOF_SKB1
         [ -n "$_skb_blk2" ] || continue
         _kip="$(blockdb_field "$_skb_blk2" ip)"
         if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_kip"; then continue; fi
-        if nssh "$_ka" "true" </dev/null >/dev/null 2>&1; then
+        if nya "$_ka" "true" </dev/null >/dev/null 2>&1; then
             log OK "handshake $_ka: OK"
         else
             log WARN "handshake $_ka: needs setup"

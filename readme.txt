@@ -18,18 +18,12 @@
 
   CONNECT
 
-    nssh <alias>                    Open interactive SSH session.
-    nssh <alias> <cmd> [args...]    Run command remotely, print output.
+    Remote execution and file transfer moved to `nya` (separate repo):
 
-      nssh tx1                      # interactive shell
-      nssh tx1 uname -a             # single command -> stdout
-
-  ─────────────────────────────────────────────────────────────────────
-
-  TRANSFER
-
-    nscp <alias>:/remote/path ./local/    Copy from remote to local.
-    nscp ./local/file <alias>:/remote/    Copy from local to remote.
+      nya <alias>                    # interactive shell
+      nya <alias> uname -a           # single command -> stdout
+      nya <alias>:/remote/path ./local/    # copy from remote to local
+      nya ./local/file <alias>:/remote/    # copy from local to remote
 
   ─────────────────────────────────────────────────────────────────────
 

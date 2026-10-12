@@ -134,7 +134,7 @@ _clip_set() {
         log ERROR "local node identity unresolved -- run nina self-register first"
         exit 1
     else
-        if ! nssh "$_dst" 'nina clip serve start' >/dev/null 2>&1; then
+        if ! nya "$_dst" 'nina clip serve start' >/dev/null 2>&1; then
             log ERROR "failed to start clip serve on '$_dst'"
             exit 1
         fi
@@ -148,7 +148,7 @@ _clip_set() {
     if [ "$_self_alias" = "$_dst" ]; then
         _got="$(cat "${XDG_CACHE_HOME:-$HOME/.cache}/clipso/last" 2>/dev/null || true)"
     else
-        _got="$(nssh "$_dst" 'cat "${XDG_CACHE_HOME:-$HOME/.cache}/clipso/last"' 2>/dev/null || true)"
+        _got="$(nya "$_dst" 'cat "${XDG_CACHE_HOME:-$HOME/.cache}/clipso/last"' 2>/dev/null || true)"
     fi
     if [ "$_got" = "$_token" ]; then
         printf '[OK]    smoke-test PASS  %s -> %s\n' "$_src" "$_dst" >&2
@@ -168,7 +168,7 @@ _clip_clear() {
                 _clip_serve stop >/dev/null 2>&1 || true
                 printf '[OK]    clip serve stopped on %s\n' "$_old_dst" >&2
             else
-                if nssh "$_old_dst" 'nina clip serve stop' >/dev/null 2>&1; then
+                if nya "$_old_dst" 'nina clip serve stop' >/dev/null 2>&1; then
                     printf '[OK]    clip serve stopped on %s\n' "$_old_dst" >&2
                 else
                     printf '[WARN]  could not stop clip serve on %s\n' "$_old_dst" >&2
