@@ -19,9 +19,8 @@ subcommands:
   seed            pull other nodes rows from the cloud registry
   bootstrap-keys  distribute SSH keys to registered peers
   push            sync ts-devices.db to all registered peers
-  status          list devices and mark the local node
+  status          emit "alias ip user port" per line; first line is local
   devices         manage registered devices
-  resolve         emit "alias ip user port" per line (machine-readable)
   all             run the full pipeline (default)
 
 options:
@@ -32,7 +31,7 @@ USAGE
 nina_dispatch() {
     _sub="${1:-all}"
     case "$_sub" in
-        self-register|seed|bootstrap-keys|push|status|devices|resolve|all) shift || true ;;
+        self-register|seed|bootstrap-keys|push|status|devices|all) shift || true ;;
         -h|--help) _print_help; exit 0 ;;
         *) _dispatch_usage >&2; exit 1 ;;
     esac
@@ -45,9 +44,8 @@ nina_dispatch() {
         seed)           _do_seed ;;
         bootstrap-keys) _do_bootstrap_keys ;;
         push)           _do_push ;;
-        status)         _do_status ;;
+        status)         _do_status "$@" ;;
         devices)        _do_devices "$@" ;;
-        resolve)        _do_resolve "$@" ;;
         all)            _do_all ;;
     esac
 

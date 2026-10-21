@@ -11,7 +11,17 @@
     nina seed              Pull other nodes rows from the cloud registry.
     nina bootstrap-keys    Distribute SSH keys to registered peers.
     nina push              Sync ts-devices.db to all registered peers.
-    nina status            List devices; marks the local node.
+    nina status [--remote-only]
+                           Emit "alias ip user port", one node per line.
+                           The FIRST line is always the local node; every
+                           following line is a remote node. No header, no
+                           colors, no padding: four space-separated fields,
+                           stable and parseable.
+                           --remote-only omits the local line and emits the
+                           remote nodes only -- that is the source nya
+                           consumes. Exactly one of the two forms exists;
+                           there is no separate resolve subcommand.
+    nina status -h         Show the status contract.
     nina -h | --help       Show this help.
 
   ─────────────────────────────────────────────────────────────────────

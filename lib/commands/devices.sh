@@ -1,84 +1,6 @@
 #!/bin/sh
 # devices.sh -- nina devices subcommand (tailscale-only).
 
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# _do_resolve [--include-self] [<alias>...]
-#
-# Emite "alias ip user port" por linea, un nodo por linea.
-#
-# Contrato de maquina para consumidores externos (ej. nya). El formato
-# es estable y parseable: campos separados por espacio simple, sin
-# colores, sin encabezados.
-#
-# Por DEFAULT excluye el nodo local: quien consume esta salida (nya,
-# distribucion, sync) quiere contactar OTROS nodos, no a si mismo por
-# SSH. Incluirse es el caso raro, y se pide explicito con --include-self.
-#
-# Sin argumentos de filtro: todos los nodos remotos.
-# Con argumentos <alias>...: solo esos (los desconocidos se omiten).
-# ---------------------------------------------------------------------------
-_do_resolve() {
-    _include_self=0
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --include-self) _include_self=1; shift ;;
-            --) shift; break ;;
-            -*) printf '[ERROR] _do_resolve: unknown flag: %s\n' "$1" >&2; return 2 ;;
-            *) break ;;
-        esac
-    done
-
-    _db="$BASE/state/ts-devices.db"
-    if [ ! -f "$_db" ] || [ ! -s "$_db" ]; then
-        return 0
-    fi
-
-    if [ "$#" -eq 0 ]; then
-        _resolve_filter=""
-    else
-        _resolve_filter=""
-        for _arg in "$@"; do
-            [ -n "$_resolve_filter" ] && _resolve_filter="$_resolve_filter|"
-            _esc="$(printf '%s' "$_arg" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
-            _resolve_filter="${_resolve_filter}${_esc}"
-        done
-    fi
-
-    # Alias del nodo local (vacio si no esta registrado).
-    _self_alias="$(node_alias 2>/dev/null || printf '')"
-
-    awk -v filter="$_resolve_filter" -v self_alias="$_self_alias" -v include_self="$_include_self" '
-        BEGIN { RS=""; FS="\n" }
-        {
-            alias_v=""; ip_v=""; user_v=""; port_v=""
-            for (i = 1; i <= NF; i++) {
-                colon = index($i, ":")
-                if (colon == 0) continue
-                k = substr($i, 1, colon - 1)
-                v = substr($i, colon + 2)
-                if (k == "alias") alias_v = v
-                else if (k == "ip") ip_v = v
-                else if (k == "user") user_v = v
-                else if (k == "port") port_v = v
-            }
-            if (alias_v == "") next
-
-            if (include_self == "0" && self_alias != "" && alias_v == self_alias) next
-
-            if (filter != "") {
-                n = split(filter, fa, "|")
-                match_found = 0
-                for (j = 1; j <= n; j++) {
-                    if (fa[j] == alias_v) { match_found = 1; break }
-                }
-                if (!match_found) next
-            }
-            printf "%s %s %s %s\n", alias_v, ip_v, user_v, port_v
-        }
-    ' "$_db"
-}
-
 _do_devices() {
     _dev_sub="${1:-list}"
     case "$_dev_sub" in
@@ -127,17 +49,24 @@ USAGE
 }
 
 _devices_list() {
+    _remote_only="${1:-0}"
     _db="$BASE/state/ts-devices.db"
-    [ -f "$_db" ] && [ -s "$_db" ] || { printf '[INFO] no devices registered\n' >&2; return 0; }
-    _me="$(node_alias 2>/dev/null || printf '')"
-    if [ -n "$_me" ]; then
+    _me="$(node_alias)"
+
+    if [ "$_remote_only" -eq 0 ]; then
+        [ -n "$_me" ] || { printf '[ERROR] local node not registered -- run: nina self-register\n' >&2; return 1; }
+        [ -f "$_db" ] && [ -s "$_db" ] || { printf '[ERROR] device registry missing or empty: %s\n' "$_db" >&2; return 1; }
         _me_blk="$(blockdb_get "$_db" alias "$_me")"
+        [ -n "$_me_blk" ] || { printf '[ERROR] local node %s absent from %s\n' "$_me" "$_db" >&2; return 1; }
         _me_ip="$(blockdb_field "$_me_blk" ip)"
-        _me_nid="$(blockdb_field "$_me_blk" node_id)"
-        printf 'local_node=%s ip=%s node_id=%s\n' "$_me" "${_me_ip:-?}" "${_me_nid:-?}"
-    else
-        printf 'local_node=unknown\n'
+        _me_user="$(blockdb_field "$_me_blk" user)"
+        _me_port="$(blockdb_field "$_me_blk" port)"
+        [ -n "$_me_port" ] || _me_port=8022
+        printf '%s %s %s %s\n' "$_me" "$_me_ip" "$_me_user" "$_me_port"
     fi
+
+    [ -f "$_db" ] && [ -s "$_db" ] || return 0
+
     _aliases="$(awk '
         BEGIN { RS=""; FS="\n" }
         {
@@ -148,27 +77,19 @@ _devices_list() {
                 if (fk == "alias") { print substr($i, colon + 2); break }
             }
         }
-    ' "$_db" 2>/dev/null)"
+    ' "$_db")"
+
     [ -n "$_aliases" ] || return 0
     printf '%s\n' "$_aliases" | while IFS= read -r _alias; do
         [ -n "$_alias" ] || continue
+        if [ -n "$_me" ] && [ "$_alias" = "$_me" ]; then continue; fi
         _blk="$(blockdb_get "$_db" alias "$_alias")"
         [ -n "$_blk" ] || continue
         _ip="$(blockdb_field "$_blk" ip)"
         _user="$(blockdb_field "$_blk" user)"
         _port="$(blockdb_field "$_blk" port)"
         [ -n "$_port" ] || _port=8022
-        _os="$(blockdb_field "$_blk" os)"
-        _kind="$(blockdb_field "$_blk" kind)"
-        _root="$(blockdb_field "$_blk" root)"
-        [ -n "$_os" ] || _os="unknown"
-        [ -n "$_kind" ] || _kind="unknown"
-        [ -n "$_root" ] || _root="unknown"
-        _type="$(platform_type "$_os")"
-        _nid="$(blockdb_field "$_blk" node_id)"
-        _is_local="no"
-        [ -n "$_me" ] && [ "$_alias" = "$_me" ] && _is_local="yes"
-        printf 'local=%s alias=%s ip=%s user=%s port=%s type=%s os=%s kind=%s root=%s node_id=%s\n' "$_is_local" "$_alias" "$_ip" "$_user" "$_port" "$_type" "$_os" "$_kind" "$_root" "${_nid:-?}"
+        printf '%s %s %s %s\n' "$_alias" "$_ip" "$_user" "$_port"
     done
 }
 
@@ -471,5 +392,23 @@ _prompt_field() {
 }
 
 _do_status() {
-    _devices_list
+    _status_remote_only=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --remote-only) _status_remote_only=1; shift ;;
+            -h|--help)
+                cat <<'USAGE'
+usage: nina status [--remote-only]
+
+  nina status                 Emit "alias ip user port", one node per line.
+                              The FIRST line is always the local node;
+                              every following line is a remote node.
+  nina status --remote-only   Emit remote nodes only, no local line.
+                              This is the machine source nya consumes.
+USAGE
+                return 0 ;;
+            *) printf '[ERROR] nina status: unknown argument: %s\n' "$1" >&2; return 2 ;;
+        esac
+    done
+    _devices_list "$_status_remote_only"
 }
