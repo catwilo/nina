@@ -130,6 +130,14 @@ _devices_list() {
     _db="$BASE/state/ts-devices.db"
     [ -f "$_db" ] && [ -s "$_db" ] || { printf '[INFO] no devices registered\n' >&2; return 0; }
     _me="$(node_alias 2>/dev/null || printf '')"
+    if [ -n "$_me" ]; then
+        _me_blk="$(blockdb_get "$_db" alias "$_me")"
+        _me_ip="$(blockdb_field "$_me_blk" ip)"
+        _me_nid="$(blockdb_field "$_me_blk" node_id)"
+        printf 'local_node=%s ip=%s node_id=%s\n' "$_me" "${_me_ip:-?}" "${_me_nid:-?}"
+    else
+        printf 'local_node=unknown\n'
+    fi
     _aliases="$(awk '
         BEGIN { RS=""; FS="\n" }
         {
@@ -158,9 +166,9 @@ _devices_list() {
         [ -n "$_root" ] || _root="unknown"
         _type="$(platform_type "$_os")"
         _nid="$(blockdb_field "$_blk" node_id)"
-        _marker=""
-        [ -n "$_me" ] && [ "$_alias" = "$_me" ] && _marker=" -- THIS IS THE LOCAL NODE: ${_alias}"
-        printf 'alias=%s ip=%s user=%s port=%s type=%s os=%s kind=%s root=%s node_id=%s%s\n' "$_alias" "$_ip" "$_user" "$_port" "$_type" "$_os" "$_kind" "$_root" "${_nid:-?}" "$_marker"
+        _is_local="no"
+        [ -n "$_me" ] && [ "$_alias" = "$_me" ] && _is_local="yes"
+        printf 'local=%s alias=%s ip=%s user=%s port=%s type=%s os=%s kind=%s root=%s node_id=%s\n' "$_is_local" "$_alias" "$_ip" "$_user" "$_port" "$_type" "$_os" "$_kind" "$_root" "${_nid:-?}"
     done
 }
 
