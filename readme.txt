@@ -12,7 +12,8 @@
     nina bootstrap-keys    Distribute SSH keys to registered peers.
     nina push              Sync ts-devices.db to all registered peers.
     nina status [--remote-only]
-                           Emit "alias ip user port", one node per line.
+                           Emit "alias ip user port kind os", one node per line.
+                           kind: celular|computador. os: android|debian|...
                            The FIRST line is always the local node; every
                            following line is a remote node. No header, no
                            colors, no padding: four space-separated fields,
@@ -39,7 +40,6 @@
 
   DEVICE MANAGEMENT  (nina devices)
 
-    nina devices list                            List all devices.
     nina devices add <alias> <ip> <user> [port]  Register manually.
     nina devices edit <alias>                    Edit device details.
     nina devices rename <old> <new>              Rename alias.

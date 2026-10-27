@@ -19,7 +19,7 @@ subcommands:
   seed            pull other nodes rows from the cloud registry
   bootstrap-keys  distribute SSH keys to registered peers
   push            sync ts-devices.db to all registered peers
-  status          emit "alias ip user port" per line; first line is local
+  status          emit "alias ip user port kind os" per line; first is local
   devices         manage registered devices
   all             run the full pipeline (default)
 

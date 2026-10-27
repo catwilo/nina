@@ -4,12 +4,11 @@
 _do_devices() {
     _dev_sub="${1:-list}"
     case "$_dev_sub" in
-        list|add|edit|rename|remove|update-ip|refresh-ips|rollback|push-vpn|resetall|node-set|node-add|registry-set|hostkey-refresh) shift || true ;;
+        add|edit|rename|remove|update-ip|refresh-ips|rollback|push-vpn|resetall|node-set|node-add|registry-set|hostkey-refresh) shift || true ;;
         -h|--help) _devices_usage >&2; exit 0 ;;
         *) printf '[ERROR] unknown devices subcommand: %s\n' "$_dev_sub" >&2; _devices_usage >&2; exit 1 ;;
     esac
     case "$_dev_sub" in
-        list)            _devices_list "$@" ;;
         add)             _devices_add "$@" ;;
         edit)            _devices_edit "$@" ;;
         rename)          _devices_rename "$@" ;;
@@ -31,7 +30,6 @@ _devices_usage() {
 usage: nina devices <subcommand> [options]
 
 subcommands:
-  list              show all registered devices (ts-devices.db)
   add <alias> <ip> <user> [port]  register a device manually
   edit <alias>      interactively edit device details
   rename <old> <new>  rename a device alias
@@ -62,7 +60,9 @@ _devices_list() {
         _me_user="$(blockdb_field "$_me_blk" user)"
         _me_port="$(blockdb_field "$_me_blk" port)"
         [ -n "$_me_port" ] || _me_port=8022
-        printf '%s %s %s %s\n' "$_me" "$_me_ip" "$_me_user" "$_me_port"
+        _me_os="$(blockdb_field "$_me_blk" os)"
+        _me_kind="$(platform_type "$_me_os")"
+        printf '%s %s %s %s %s %s\n' "$_me" "$_me_ip" "$_me_user" "$_me_port" "$_me_kind" "$_me_os"
     fi
 
     [ -f "$_db" ] && [ -s "$_db" ] || return 0
@@ -89,7 +89,9 @@ _devices_list() {
         _user="$(blockdb_field "$_blk" user)"
         _port="$(blockdb_field "$_blk" port)"
         [ -n "$_port" ] || _port=8022
-        printf '%s %s %s %s\n' "$_alias" "$_ip" "$_user" "$_port"
+        _os="$(blockdb_field "$_blk" os)"
+        _kind="$(platform_type "$_os")"
+        printf '%s %s %s %s %s %s\n' "$_alias" "$_ip" "$_user" "$_port" "$_kind" "$_os"
     done
 }
 
@@ -400,9 +402,10 @@ _do_status() {
                 cat <<'USAGE'
 usage: nina status [--remote-only]
 
-  nina status                 Emit "alias ip user port", one node per line.
-                              The FIRST line is always the local node;
-                              every following line is a remote node.
+  nina status                 Emit "alias ip user port kind os", one node
+                              per line. The FIRST line is always the local
+                              node; every following line is a remote node.
+                              kind: celular|computador. os: android|debian|...
   nina status --remote-only   Emit remote nodes only, no local line.
                               This is the machine source nya consumes.
 USAGE
