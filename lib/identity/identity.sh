@@ -182,27 +182,40 @@ _local_ips() {
 
 # detect_tailscale_ip -- print this node's 100.* tailscale IP, or empty.
 #
-# Source order (no hardcoded interface name -- works on Android/Termux,
-# Debian, macOS):
-#   1. `tailscale ip -4` -- authoritative, cross-platform. This is the
-#      primary path; nina already depends on tailscale.
-#   2. Scan every interface for a 100.* IP. Tailscale uses the CGNAT range
-#      100.64.0.0/10 exclusively; no other legitimate network does. Works
-#      with `ip` (iproute2) or `ifconfig` (net-tools/busybox) without
-#      caring whether the interface is tun0, tailscale0 or utun3.
-#   3. Empty. No 100.* IP means this node has no tailscale route; callers
-#      treat it as unavailable.
+# Technique depends on the OS. The 100.64.0.0/10 CGNAT range is used
+# exclusively by Tailscale; no other legitimate network can produce it,
+# so matching "inet 100." is safe.
+#
+#   Android/Termux:   `ifconfig` only. Android hides VPN interfaces from
+#                     unprivileged processes through every other path
+#                     (`ip addr`, `tailscale ip` when the CLI is absent),
+#                     but the toybox ifconfig enumerates tun1/tun0 live.
+#                     This is the one technique that works on a phone
+#                     without root.
+#   Linux/Debian/macOS: `tailscale ip -4` (authoritative when the CLI is
+#                     installed) -> `ip -4 -o addr show` -> `ifconfig`
+#                     (last resort for hosts without iproute2).
 detect_tailscale_ip() {
     _ts_ip=""
-    if command -v tailscale >/dev/null 2>&1; then
-        _ts_ip="$(tailscale ip -4 2>/dev/null | awk 'NR==1 && /^100\./ {print; exit}')"
-    fi
-    if [ -z "$_ts_ip" ] && command -v ip >/dev/null 2>&1; then
-        _ts_ip="$(ip -4 -o addr show 2>/dev/null | awk '$4 ~ /^100\./ {split($4,a,"/"); print a[1]; exit}')"
-    fi
-    if [ -z "$_ts_ip" ] && command -v ifconfig >/dev/null 2>&1; then
-        _ts_ip="$(ifconfig 2>/dev/null | awk '/inet 100\./ {print $2; exit}')"
-    fi
+    _ts_os="$(detect_os 2>/dev/null || printf 'linux')"
+    case "$_ts_os" in
+        android|ios)
+            if command -v ifconfig >/dev/null 2>&1; then
+                _ts_ip="$(ifconfig 2>/dev/null | awk '/inet 100\./ {print $2; exit}')"
+            fi
+            ;;
+        *)
+            if command -v tailscale >/dev/null 2>&1; then
+                _ts_ip="$(tailscale ip -4 2>/dev/null | awk 'NR==1 && /^100\./ {print; exit}')"
+            fi
+            if [ -z "$_ts_ip" ] && command -v ip >/dev/null 2>&1; then
+                _ts_ip="$(ip -4 -o addr show 2>/dev/null | awk '$4 ~ /^100\./ {split($4,a,"/"); print a[1]; exit}')"
+            fi
+            if [ -z "$_ts_ip" ] && command -v ifconfig >/dev/null 2>&1; then
+                _ts_ip="$(ifconfig 2>/dev/null | awk '/inet 100\./ {print $2; exit}')"
+            fi
+            ;;
+    esac
     case "$_ts_ip" in
         100.*) printf '%s\n' "$_ts_ip" ;;
         *) printf '' ;;
