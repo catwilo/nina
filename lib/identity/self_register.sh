@@ -83,7 +83,7 @@ _self_register() {
     log OK "self-registered $_self_alias ($_self_tailscale_ip)"
 
     if command -v node_alias_set >/dev/null 2>&1; then
-        node_alias_set "$_self_alias" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" || \
+        node_alias_set "$_self_alias" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" "$_self_tailscale_ip" || \
             log WARN "node_alias_set failed -- registry.db not updated"
     fi
     if command -v _node_config_save >/dev/null 2>&1; then

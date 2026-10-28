@@ -17,6 +17,7 @@ _registry_write() {
     _rw_os="$5"
     _rw_kind="$6"
     _rw_root="$7"
+    _rw_ip="${8:-}"
     if [ -z "$_rw_nid" ] || [ -z "$_rw_alias" ] || [ -z "$_rw_user" ] || [ -z "$_rw_port" ] || [ -z "$_rw_os" ] || [ -z "$_rw_kind" ] || [ -z "$_rw_root" ]; then
         printf '[ERROR] _registry_write: node-id, alias, user, port, os, kind and root are required\n' >&2
         return 1
@@ -74,8 +75,8 @@ _registry_write() {
     fi
 
     _rw_current="$_rw_prev_row"
-    _rw_target="$(printf 'node_id: %s\nalias: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\n' \
-        "$_rw_nid" "$_rw_alias" "$_rw_user" "$_rw_port" "$_rw_os" "$_rw_kind" "$_rw_root" "${_rw_hk:-}")"
+    _rw_target="$(printf 'node_id: %s\nalias: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nip: %s\n' \
+        "$_rw_nid" "$_rw_alias" "$_rw_user" "$_rw_port" "$_rw_os" "$_rw_kind" "$_rw_root" "${_rw_hk:-}" "${_rw_ip:-}")"
 
     if [ "$_rw_current" = "$_rw_target" ]; then
         :
@@ -106,11 +107,12 @@ node_alias_set() {
     _nas_os="$4"
     _nas_kind="$5"
     _nas_root="$6"
+    _nas_ip="${7:-}"
     if [ -z "$_nas_alias" ] || [ -z "$_nas_user" ] || [ -z "$_nas_port" ] || [ -z "$_nas_os" ] || [ -z "$_nas_kind" ] || [ -z "$_nas_root" ]; then
         printf '[ERROR] node_alias_set: alias, user, port, os, kind and root are required\n' >&2
         return 1
     fi
-    _registry_write "$(node_id)" "$_nas_alias" "$_nas_user" "$_nas_port" "$_nas_os" "$_nas_kind" "$_nas_root"
+    _registry_write "$(node_id)" "$_nas_alias" "$_nas_user" "$_nas_port" "$_nas_os" "$_nas_kind" "$_nas_root" "$_nas_ip"
 }
 
 registry_row_by_alias() {

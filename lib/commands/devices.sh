@@ -223,6 +223,43 @@ _devices_refresh_ips() {
         log WARN "no tailscale IP on tun0 -- local row not updated"
     fi
 
+    # Registry cloud: pull latest and use its ip field if present. This is
+    # the primary path: each node wrote its own ip in self-register, so
+    # refresh-ips does not depend on tailscale hostnames matching aliases.
+    if [ -f "$REGISTRY_DB" ] && command -v blockdb_get >/dev/null 2>&1; then
+        _ri_dir="$(dirname "$REGISTRY_DB")"
+        if [ -d "$_ri_dir/.git" ]; then
+            ( cd "$_ri_dir" && git pull --rebase origin main >/dev/null 2>&1 ) || true
+        fi
+    fi
+    _aliases_for_reg="$(awk '
+        BEGIN { RS=""; FS="\n" }
+        {
+            for (i = 1; i <= NF; i++) {
+                colon = index($i, ":")
+                if (colon == 0) continue
+                fk = substr($i, 1, colon - 1)
+                if (fk == "alias") { print substr($i, colon + 2); break }
+            }
+        }
+    ' "$_db")"
+    printf '%s\n' "$_aliases_for_reg" | while IFS= read -r _alias; do
+        [ -n "$_alias" ] || continue
+        _blk="$(blockdb_get "$_db" alias "$_alias")"
+        [ -n "$_blk" ] || continue
+        _blk_nid="$(blockdb_field "$_blk" node_id)"
+        [ "$_blk_nid" = "$_my_nid" ] && continue
+        _reg_blk="$(registry_row_by_alias "$_alias" 2>/dev/null || true)"
+        [ -n "$_reg_blk" ] || continue
+        _reg_ip="$(blockdb_field "$_reg_blk" ip)"
+        [ -n "$_reg_ip" ] || continue
+        _cur_ip="$(blockdb_field "$_blk" ip)"
+        [ "$_cur_ip" = "$_reg_ip" ] && continue
+        _new="$(printf '%s\n' "$_blk" | awk -v nip="$_reg_ip" '/^ip:/ { print "ip: " nip; next } { print }')"
+        blockdb_upsert "$_db" alias "$_alias" "$_new"
+        log OK "refresh $_alias (registry): ip -> $_reg_ip"
+    done
+
     has_cmd tailscale || { log INFO "tailscale CLI not available -- peer IPs unchanged"; return 0; }
     has_cmd jq || { log WARN "jq missing -- peer refresh skipped"; return 0; }
 
@@ -245,9 +282,11 @@ _devices_refresh_ips() {
         [ -n "$_blk" ] || continue
         _blk_nid="$(blockdb_field "$_blk" node_id)"
         [ "$_blk_nid" = "$_my_nid" ] && continue
+        _cur_ip="$(blockdb_field "$_blk" ip)"
+        [ -n "$_cur_ip" ] && continue
         _ip="$(printf '%s' "$_ts_json" | jq -r --arg h "$_alias" '.Peer // {} | to_entries[] | .value | select(.HostName == $h) | .TailscaleIPs[0] // empty' 2>/dev/null | head -1)"
         if [ -z "$_ip" ] || [ "$_ip" = "null" ]; then
-            log WARN "refresh $_alias: not in tailscale status"
+            log WARN "refresh $_alias: not in registry nor tailscale status"
             continue
         fi
         _new="$(printf '%s\n' "$_blk" | awk -v nip="$_ip" '/^ip:/ { print "ip: " nip; next } { print }')"
