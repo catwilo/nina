@@ -162,7 +162,10 @@ _distribute_registry() {
             log WARN "registry -> $_na skipped (unreachable: $_nip:$_nport)"
             continue
         fi
-        _dr_remote_head="$(nya "$_na" "cd ~/.nina-registry 2>/dev/null && git pull --rebase origin main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null)"
+        # -m mix + strip the "[alias] " prefix: nya may render per-line
+        # prefixes depending on mode, and comparing them to the bare hash
+        # produced false DIFF warnings.
+        _dr_remote_head="$(nya -m mix "$_na" "cd ~/.nina-registry 2>/dev/null && git pull --rebase origin main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null | sed "s/^\[$_na\] //")"
         if [ -z "$_dr_remote_head" ]; then
             log WARN "registry pull on $_na failed"
             continue
