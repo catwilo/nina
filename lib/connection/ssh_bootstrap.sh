@@ -38,7 +38,14 @@ ssh_key_bootstrap() {
     printf '%s\n' "$_aliases" | while IFS= read -r _ka; do
         [ -n "$_ka" ] || continue
         [ "$_ka" = "$_my_alias" ] && continue
-        if nya "$_ka" "true" </dev/null >/dev/null 2>&1; then
+        # Precondition: SSH port reachable. The bootstrap job is to install
+        # the key, so requiring nya (key auth) to succeed first is circular
+        # and produces spurious "peer unreachable" warnings. reachable_ssh
+        # only checks the TCP port, which is exactly what bootstrap needs.
+        _ka_ip="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" ip 2>/dev/null || true)"
+        _ka_port="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" port 2>/dev/null || true)"
+        [ -n "$_ka_port" ] || _ka_port=22
+        if [ -n "$_ka_ip" ] && reachable_ssh "$_ka_ip" "$_ka_port"; then
             nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
                 && log OK "key ensured on $_ka" \
                 || log WARN "key append to $_ka failed"
