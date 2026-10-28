@@ -62,7 +62,10 @@ _devices_list() {
         [ -n "$_me_port" ] || _me_port=8022
         _me_os="$(blockdb_field "$_me_blk" os)"
         _me_kind="$(platform_type "$_me_os")"
-        printf '%s %s %s %s %s %s\n' "$_me" "$_me_ip" "$_me_user" "$_me_port" "$_me_kind" "$_me_os"
+        # Placeholder "-" for empty fields keeps the contract positional:
+        # downstream consumers split on whitespace and read $1..$6; an
+        # empty IP collapsed the fields and broke every caller.
+        printf '%s %s %s %s %s %s\n' "$_me" "${_me_ip:--}" "${_me_user:--}" "$_me_port" "$_me_kind" "${_me_os:--}"
     fi
 
     [ -f "$_db" ] && [ -s "$_db" ] || return 0
@@ -91,7 +94,7 @@ _devices_list() {
         [ -n "$_port" ] || _port=8022
         _os="$(blockdb_field "$_blk" os)"
         _kind="$(platform_type "$_os")"
-        printf '%s %s %s %s %s %s\n' "$_alias" "$_ip" "$_user" "$_port" "$_kind" "$_os"
+        printf '%s %s %s %s %s %s\n' "$_alias" "${_ip:--}" "${_user:--}" "$_port" "$_kind" "${_os:--}"
     done
 }
 

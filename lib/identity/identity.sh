@@ -291,7 +291,11 @@ detect_kind() {
 
 # platform_type OS -- derive display type (celular/computador) from os slug.
 platform_type() {
+    # Empty os means "unknown", not "computer": report "-" so callers do not
+    # display a lie. Only android/ios are phones; anything else with a known
+    # os is a computer.
     case "${1:-}" in
+        "")          printf '-' ;;
         android|ios) printf 'celular' ;;
         *)           printf 'computador' ;;
     esac
