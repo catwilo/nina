@@ -8,7 +8,6 @@ sync_devices_to_nodes() {
     [ -f "$_ts_db" ] && [ -s "$_ts_db" ] || return 0
     has_cmd nya || { log WARN "nya not found -- skipping sync"; return 0; }
 
-    _remote_db="$HOME/.local/share/nina/state/ts-devices.db"
     _sdn_aliases="$(session_tmp sdn_aliases)"
     awk '
         BEGIN { RS=""; FS="\n" }
@@ -35,7 +34,7 @@ sync_devices_to_nodes() {
 
     while IFS='|' read -r _sa _sip; do
         [ -n "$_sa" ] || continue
-        if nya "$_sa" "mkdir -p ~/.local/share/nina/state && cat > $_remote_db" < "$_ts_db"; then
+        if nya "$_sa" "mkdir -p ~/.local/share/nina/state && cat > ~/.local/share/nina/state/ts-devices.db" < "$_ts_db"; then
             log OK "synced ts-devices.db -> $_sa"
         else
             log WARN "sync to $_sa failed"
