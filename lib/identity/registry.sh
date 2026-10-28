@@ -165,7 +165,11 @@ _distribute_registry() {
         # -m mix + strip the "[alias] " prefix: nya may render per-line
         # prefixes depending on mode, and comparing them to the bare hash
         # produced false DIFF warnings.
-        _dr_remote_head="$(nya -m mix "$_na" "cd ~/.nina-registry 2>/dev/null && git pull --rebase origin main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null | sed "s/^\[$_na\] //")"
+        # Force main: a previous _registry_write on this peer may have
+        # left a chore/registry-* branch checked out, and pull --rebase
+        # origin main fails on a non-main branch. checkout -B main resets
+        # the local main to origin/main regardless of the current branch.
+        _dr_remote_head="$(nya -m mix "$_na" "cd ~/.nina-registry 2>/dev/null && git fetch origin >/dev/null 2>&1 && git checkout -B main origin/main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null | sed "s/^\[$_na\] //")"
         if [ -z "$_dr_remote_head" ]; then
             log WARN "registry pull on $_na failed"
             continue
