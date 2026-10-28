@@ -36,7 +36,15 @@ nina_dispatch() {
         *) _dispatch_usage >&2; exit 1 ;;
     esac
 
-    _dispatch_lock_wrap
+    # status is read-only and is invoked recursively: nya calls
+    # `nina status --remote-only` to resolve targets, and nya is called
+    # from nina's own distribution paths. Taking the lock here would make
+    # the child status fail with "already running" and break every
+    # registry/distribution step. Mutating subcommands keep the lock.
+    case "$_sub" in
+        status) ;;
+        *) _dispatch_lock_wrap ;;
+    esac
     log INFO "nina $_sub starting (base=$BASE)"
 
     case "$_sub" in
