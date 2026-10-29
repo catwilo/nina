@@ -45,6 +45,8 @@ ssh_key_bootstrap() {
         _ka_ip="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" ip 2>/dev/null || true)"
         _ka_port="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" port 2>/dev/null || true)"
         [ -n "$_ka_port" ] || _ka_port=22
+        _ka_user="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" user 2>/dev/null || true)"
+        [ -n "$_ka_user" ] || _ka_user=u
         if [ -n "$_ka_ip" ] && reachable_ssh "$_ka_ip" "$_ka_port"; then
             nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
                 && log OK "key ensured on $_ka" \
@@ -56,7 +58,12 @@ ssh_key_bootstrap() {
                 log OK "remote key from $_ka installed locally"
             fi
         else
-            log WARN "peer $_ka unreachable -- manual ssh-copy-id once"
+            # TCP reachable but key auth failed: this is the circular
+            # bootstrap case (nya needs a key to install a key). Print the
+            # exact one-shot remediation instead of a vague warning, so
+            # the user can break the loop in one command per peer.
+            log WARN "peer $_ka reachable but key auth failed -- run once:"
+            log WARN "  ssh-copy-id -p ${_ka_port:-8022} ${_ka_user:-u}@${_ka_ip}"
         fi
     done
 }
