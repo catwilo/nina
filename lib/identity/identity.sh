@@ -13,14 +13,14 @@
 # The seed is never transmitted raw: node_id() emits SHA-256 truncated to 16
 # hex chars (follows systemd guidance against leaking machine-id directly).
 #
-# Master registry ($HOME/.nina-registry/registry.db) maps
+# Master registry ($HOME/.nina-registry/nodes.db) maps
 # node-id -> canonical alias:
 #   NODE_ID|ALIAS|USER|PORT
 # It is the source of truth for "who is this device", independent of IP.
 # The registry lives in its own git-backed repo (github.com:catwilo/noemap-
 # registry, cloned to $HOME/.noemap-registry) so identity survives a node
 # reformat/reinstall via git, independent of any single node being reachable
-# (miko-task#102 precondition; see noemap#51). REGISTRY_DB can still be
+# (miko-task#102 precondition; see noemap#51). NODES_DB can still be
 # overridden via env var for tests or alternate setups.
 
 # _identity_load_deps -- carga las dependencias de este modulo desde LIB.
@@ -68,16 +68,16 @@ _identity_statedir() {
 
 # _identity_registry_default -- default path for the git-backed registry repo.
 _identity_registry_default() {
-    printf '%s\n' "$HOME/.nina-registry/registry.db"
+    printf '%s\n' "$HOME/.nina-registry/nodes.db"
 }
 
-REGISTRY_DB="${REGISTRY_DB:-$(_identity_registry_default)}"
+NODES_DB="${NODES_DB:-$(_identity_registry_default)}"
 MACHINE_SEED="${MACHINE_SEED:-$(_identity_statedir)/machine-seed}"
 
 # NODE_CONFIG -- local per-node cache (offline-first). Not git-backed: this
 # is the node's own copy of its alias/user/port, so a node with no network
 # access to the master registry (or a fresh clone not yet pulled) still
-# knows who it is. Master registry (REGISTRY_DB) remains source of truth
+# knows who it is. Master registry (NODES_DB) remains source of truth
 # whenever reachable; this file is the fallback, and is kept in sync with
 # it on every successful node_alias_set() (miko-task noemap#295).
 NODE_CONFIG="${NODE_CONFIG:-$(_identity_statedir)/node-config}"
@@ -109,15 +109,15 @@ _node_config_save() {
     }
 }
 
-# _identity_registry_warn_once -- if REGISTRY_DB points at the default
+# _identity_registry_warn_once -- if NODES_DB points at the default
 # git-backed path but that repo is not cloned on this node, warn once to
 # stderr (not on every node_alias()/node_registry_row() call, which happens
 # frequently and would be noisy). Silent no-op once the repo exists, or when
-# REGISTRY_DB was overridden away from the default (caller's responsibility).
+# NODES_DB was overridden away from the default (caller's responsibility).
 _IDENTITY_REGISTRY_WARNED="${_IDENTITY_REGISTRY_WARNED:-0}"
 _identity_registry_warn_once() {
     [ "$_IDENTITY_REGISTRY_WARNED" = "1" ] && return 0
-    [ "$REGISTRY_DB" = "$(_identity_registry_default)" ] || return 0
+    [ "$NODES_DB" = "$(_identity_registry_default)" ] || return 0
     [ -d "$HOME/.nina-registry/.git" ] && return 0
     printf '[WARN] registry repo not found at %s -- clone it: git clone git@github.com:catwilo/nina-registry.git %s\n' \
         "$HOME/.nina-registry" "$HOME/.nina-registry" >&2
@@ -222,31 +222,6 @@ detect_tailscale_ip() {
     esac
 }
 
-# _tailscale_active -- returns 0 if this node has a live tailscale IP AND at
-# least one peer with a 100.* IP in ts-devices.db. Returns 1 otherwise.
-# Used to enforce tailscale-first: when active, all discovery flows must use
-# ONLY tailscale and never touch WLAN. When inactive, callers must log the
-# fallback explicitly (WLAN scan) before running interface detection.
-_tailscale_active() {
-    _tsa_ip="$(detect_tailscale_ip 2>/dev/null || true)"
-    [ -n "$_tsa_ip" ] || return 1
-    _tsa_db="${BASE:-}/state/ts-devices.db"
-    [ -f "$_tsa_db" ] && [ -s "$_tsa_db" ] || return 1
-    _tsa_own_nid="$(node_id 2>/dev/null || true)"
-    _tsa_peer_count="$(awk -v mynid="$_tsa_own_nid" '
-        BEGIN { RS=""; FS="\n"; n=0 }
-        /ip: 100\./ {
-            blk_nid=""; blk_ip=""
-            for (i=1;i<=NF;i++) {
-                if ($i ~ /^ip:/)      { sub(/^ip: /,"",$i); blk_ip=$i }
-                if ($i ~ /^node_id:/) { sub(/^node_id: /,"",$i); blk_nid=$i }
-            }
-            if (blk_nid != mynid && blk_ip != "") n++
-        }
-        END { print n+0 }
-    ' "$_tsa_db" 2>/dev/null)"
-    [ "${_tsa_peer_count:-0}" -gt 0 ]
-}
 
 # is_local_ip IP -- return 0 if IP belongs to this device (or is loopback).
 # _own_devices_ip -- the IP bound to THIS node's canonical alias in devices.db.
@@ -318,8 +293,8 @@ platform_type() {
 node_alias() {
     _identity_registry_warn_once
     _nid="$(node_id)"
-    [ -f "$REGISTRY_DB" ] || return 0
-    _blk="$(blockdb_get "$REGISTRY_DB" node_id "$_nid")"
+    [ -f "$NODES_DB" ] || return 0
+    _blk="$(blockdb_get "$NODES_DB" node_id "$_nid")"
     [ -n "$_blk" ] || return 0
     blockdb_field "$_blk" alias
 }
@@ -328,21 +303,21 @@ node_alias() {
 node_registry_row() {
     _identity_registry_warn_once
     _nid="$(node_id)"
-    [ -f "$REGISTRY_DB" ] || return 0
-    blockdb_get "$REGISTRY_DB" node_id "$_nid"
+    [ -f "$NODES_DB" ] || return 0
+    blockdb_get "$NODES_DB" node_id "$_nid"
 }
 
 # _registry_write NODE_ID ALIAS USER PORT PLATFORM -- single source of truth for
-# writing any row in registry.db: this node's own identity or another
+# writing any row in nodes.db: this node's own identity or another
 # node's, by explicit node-id. Fails (return 1, writes nothing) if ALIAS
 # is already taken by a DIFFERENT node_id. Hostkey resolution: if NODE_ID
 # is this machine's own node_id, scans its local sshd (127.0.0.1:PORT,
 # no auth); otherwise preserves whatever hostkey the row already had
 # (never guessable for a remote node without SSH auth to it).
-# On success: writes REGISTRY_DB via mkit's atomic flow, then commits and
+# On success: writes NODES_DB via mkit's atomic flow, then commits and
 # pushes the registry repo (fixed branch chore/registry-<node-id>,
 # ff-only merge -- fails loud instead of a silent merge commit on
 # divergence), then distributes to every reachable node.
 # Fix noemap#407: the working-tree branch is created and rebased onto
-# origin/main FIRST, before mkit write ever touches registry.db, so the
+# origin/main FIRST, before mkit write ever touches nodes.db, so the
 # later 'git pull --rebase' never runs against a dirty tree.

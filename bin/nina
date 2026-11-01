@@ -49,7 +49,7 @@ _print_help() {
     fi
 }
 
-_source_mods core/util.sh core/network.sh core/blockdb.sh core/lock.sh core/prompt_field.sh core/dispatch.sh identity/identity.sh identity/registry.sh identity/seed.sh identity/self_register.sh identity/prompt.sh commands/devices.sh commands/discovery.sh connection/devices.sh connection/sync.sh connection/ssh_bootstrap.sh output/output.sh
+_source_mods core/util.sh core/network.sh core/blockdb.sh core/lock.sh core/prompt_field.sh core/dispatch.sh identity/identity.sh identity/registry.sh identity/self_register.sh identity/prompt.sh commands/devices.sh commands/discovery.sh connection/ssh_bootstrap.sh
 
 
 # ---------------------------------------------------------------------------
@@ -61,8 +61,8 @@ _do_ssh_setup() {
     _alias="${1:-}"
     [ -n "$_alias" ] || { printf '[ERROR] usage: nina ssh-setup <alias>\n' >&2; exit 1; }
 
-    _db="$BASE/state/ts-devices.db"
-    [ -f "$_db" ] || { log ERROR "ts-devices.db missing: $_db"; exit 1; }
+    _db="$NODES_DB"
+    [ -f "$_db" ] || { log ERROR "nodes.db missing: $_db"; exit 1; }
 
     _blk="$(blockdb_get "$_db" alias "$_alias")"
 

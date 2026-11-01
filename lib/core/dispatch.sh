@@ -15,10 +15,8 @@ _dispatch_usage() {
 usage: nina <subcommand> [options]
 
 subcommands:
-  self-register   register this node identity in ts-devices.db/registry.db
-  seed            pull other nodes rows from the cloud registry
+  self-register   register this node identity in nodes.db
   bootstrap-keys  distribute SSH keys to registered peers
-  push            sync ts-devices.db to all registered peers
   status          emit "alias ip user port kind os" per line; first is local
   devices         manage registered devices
   all             run the full pipeline (default)
@@ -31,7 +29,7 @@ USAGE
 nina_dispatch() {
     _sub="${1:-all}"
     case "$_sub" in
-        self-register|seed|bootstrap-keys|push|status|devices|all) shift || true ;;
+        self-register|bootstrap-keys|status|devices|all) shift || true ;;
         -h|--help) _print_help; exit 0 ;;
         *) _dispatch_usage >&2; exit 1 ;;
     esac
@@ -49,9 +47,7 @@ nina_dispatch() {
 
     case "$_sub" in
         self-register)  _do_self_register ;;
-        seed)           _do_seed ;;
         bootstrap-keys) _do_bootstrap_keys ;;
-        push)           _do_push ;;
         status)         _do_status "$@" ;;
         devices)        _do_devices "$@" ;;
         all)            _do_all ;;

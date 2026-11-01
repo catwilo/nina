@@ -39,22 +39,8 @@ cleanup_session() {
 
 session_tmp() { printf '%s/%s\n' "$SESSION_TMP_DIR" "${1:-tmp}"; }
 
-atomic_write() {
-    _target="$1"
-    _dir="$(dirname "$_target")"
-    _tmp="${_dir}/.nina_tmp.$(basename "$_target").$$"
-    cat > "$_tmp" || { rm -f "$_tmp"; return 1; }
-    if [ ! -s "$_tmp" ]; then
-        rm -f "$_tmp"; log WARN "atomic_write: empty content"; return 1
-    fi
-    mv -f "$_tmp" "$_target" || { rm -f "$_tmp"; log ERROR "atomic_write: mv failed"; return 1; }
-}
 
 ensure_dirs() {
     mkdir -p "$BASE/state" "$BASE/logs" "$BASE/config" "$BASE/tmp"
 }
 
-validate_env() {
-    for _cmd in awk sed grep cut ssh; do require_cmd "$_cmd"; done
-    if ! has_cmd scp; then log WARN "scp not found -- transferencia directa no disponible"; fi
-}

@@ -9,13 +9,13 @@
 #   Termux : symlink bin/* → $PREFIX/bin, lib/* → ~/.local/share/nina/lib
 #   Debian : symlink bin/* → ~/.local/bin, lib/* → ~/.local/share/nina/lib
 #   config : symlink config/ssh_config → ~/.local/share/nina/config/ssh_config
-#   state  : real files (devices.db, cache.env) remain in ~/.local/share/nina/state
+#   state  : real files (machine-seed, node-config) remain in ~/.local/share/nina/state
 #
 # Usage:
 #   sh install.sh                     -- install/update nina (idempotent)
 #   sh install.sh -h | --help         -- show this help
 #
-# Idempotent: safe to re-run. state/devices.db stays user-owned, never overwritten.
+# Idempotent: safe to re-run. state/machine-seed stays user-owned, never overwritten.
 
 
 set -eu
@@ -125,15 +125,7 @@ if [ -f "$SCRIPT_DIR/config/ssh_config" ]; then
     log INFO "ssh_config linked"
 fi
 
-if [ ! -f "$STATEDIR/devices.db" ]; then
-    : > "$STATEDIR/devices.db"
-    log INFO "devices.db initialised (empty)"
-else
-    log INFO "devices.db left intact"
-fi
-
-: > "$STATEDIR/cache.env"
-log INFO "cache cleared"
+# state files (machine-seed, node-config) stay user-owned; nothing to seed.
 
 # ---------------------------------------------------------------------------
 # Dependency check
@@ -299,122 +291,14 @@ _ensure_nya() {
 }
 
 # ---------------------------------------------------------------------------
-ssh_key_bootstrap() {
-    # Internal calls: never prompt for a password (nya usa BatchMode=yes
-    # por default en sus invocaciones ssh).
-
-    _key="$HOME/.ssh/id_ed25519"
-    _pub="$_key.pub"
-
-    mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
-    if [ ! -f "$_key" ]; then
-        if has ssh-keygen; then
-            ssh-keygen -t ed25519 -N "" -f "$_key" -C "nina@$(hostname 2>/dev/null || echo node)" >/dev/null 2>&1 \
-                && log OK "generated ssh key: $_key" \
-                || { log WARN "ssh-keygen failed -- skipping key bootstrap"; return 0; }
-        else
-            log WARN "ssh-keygen not found -- skipping key bootstrap"; return 0
-        fi
-    else
-        log INFO "ssh key already present: $_key"
-    fi
-    chmod 600 "$_key" 2>/dev/null || true
-    [ -f "$_pub" ] || { log WARN "no public key at $_pub -- skipping distribution"; return 0; }
-
-    _devdb="$STATEDIR/devices.db"
-    [ -f "$_devdb" ] && [ -s "$_devdb" ] || { log INFO "no nodes registered -- key distribution skipped"; return 0; }
-    _ensure_nya || { log WARN "nya unavailable -- key distribution skipped"; return 0; }
-
-    # blockdb.sh must load before identity.sh, which calls blockdb_get/
-    # blockdb_field internally.
-    if [ -f "$LIBDIR/core/blockdb.sh" ]; then
-        # shellcheck source=/dev/null
-        . "$LIBDIR/core/blockdb.sh"
-    fi
-    # Load is_local_ip so we never try to SSH into ourselves (local IPs are
-    # dynamic/router-assigned; enumerated live via ifconfig in identity.sh).
-    if [ -f "$LIBDIR/identity/identity.sh" ]; then
-        # shellcheck source=/dev/null
-        . "$LIBDIR/identity/identity.sh"
-    fi
-
-    _pubdata="$(cat "$_pub")"
-    _need_manual=""
-    # iterate registered aliases (skip self handled by nya/devices content)
-    _skb_aliases1="$(blockdb_list "$_devdb" | awk '
-        BEGIN { RS=""; FS="\n" }
-        {
-            for (i = 1; i <= NF; i++) {
-                colon = index($i, ":")
-                if (colon == 0) continue
-                fk = substr($i, 1, colon - 1)
-                if (fk == "alias") { print substr($i, colon + 2); break }
-            }
-        }
-    ')"
-    while IFS= read -r _ka; do
-        [ -n "$_ka" ] || continue
-        _skb_blk1="$(blockdb_get "$_devdb" alias "$_ka")"
-        [ -n "$_skb_blk1" ] || continue
-        _kip="$(blockdb_field "$_skb_blk1" ip)"
-        if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_kip"; then continue; fi
-        # reachable passwordless? (BatchMode: never prompts)
-        if nya "$_ka" "true" </dev/null >/dev/null 2>&1; then
-            # idempotent append: only add if not already present
-            nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
-                && log OK "key ensured on $_ka" \
-                || log WARN "key append to $_ka failed"
-
-            # Bidirectional: fetch remote's public key and add to LOCAL
-            # authorized_keys so the remote can reach us without password.
-            _remote_pub="$(nya "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
-            if [ -n "$_remote_pub" ]; then
-                mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
-                grep -qxF "$_remote_pub" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_remote_pub" >> ~/.ssh/authorized_keys
-                log OK "remote key from $_ka installed locally"
-            fi
-        else
-            _need_manual="$_need_manual $_ka"
-        fi
-    done <<EOF_SKB1
-$_skb_aliases1
-EOF_SKB1
-
-    if [ -n "$_need_manual" ]; then
-        log WARN "nodes needing first-time key setup:$_need_manual"
-        for _m in $_need_manual; do
-            printf '    run once:  ssh-copy-id -i %s %s\n' "$_pub" "$_m"
-        done
-    fi
-
-    # final handshake verification
-    _skb_aliases2="$(blockdb_list "$_devdb" | awk '
-        BEGIN { RS=""; FS="\n" }
-        {
-            for (i = 1; i <= NF; i++) {
-                colon = index($i, ":")
-                if (colon == 0) continue
-                fk = substr($i, 1, colon - 1)
-                if (fk == "alias") { print substr($i, colon + 2); break }
-            }
-        }
-    ')"
-    while IFS= read -r _ka; do
-        [ -n "$_ka" ] || continue
-        _skb_blk2="$(blockdb_get "$_devdb" alias "$_ka")"
-        [ -n "$_skb_blk2" ] || continue
-        _kip="$(blockdb_field "$_skb_blk2" ip)"
-        if command -v is_local_ip >/dev/null 2>&1 && is_local_ip "$_kip"; then continue; fi
-        if nya "$_ka" "true" </dev/null >/dev/null 2>&1; then
-            log OK "handshake $_ka: OK"
-        else
-            log WARN "handshake $_ka: needs setup"
-        fi
-    done <<EOF_SKB2
-$_skb_aliases2
-EOF_SKB2
-}
-ssh_key_bootstrap
+# Key bootstrap: delegate to the module (single source of truth).
+if [ -f "$LIBDIR/connection/ssh_bootstrap.sh" ]; then
+    # shellcheck source=/dev/null
+    . "$LIBDIR/connection/ssh_bootstrap.sh"
+    ssh_key_bootstrap
+else
+    log WARN "ssh_bootstrap.sh missing -- key distribution skipped"
+fi
 
 # ---------------------------------------------------------------------------
 # Post-install verification: prove an installed tool resolves its libs.

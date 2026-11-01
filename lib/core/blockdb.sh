@@ -122,33 +122,21 @@ blockdb_remove() {
     mv -f "$_br_tmp" "$_br_db"
 }
 
-# blockdb_max_field db_path field_name -- max NUMERIC value of field_name
-# across all blocks. Non-numeric or missing values are ignored. Prints 0
-# if the db is empty/missing or no block has a numeric value for the field.
-blockdb_max_field() {
-    _bm_db="$1"; _bm_field="$2"
-    [ -f "$_bm_db" ] || { printf '0\n'; return 0; }
-    awk -v f="$_bm_field" '
-        BEGIN { RS=""; FS="\n"; mx=0 }
+
+
+# blockdb_aliases db_path -- print each block alias field, one per line.
+blockdb_aliases() {
+    _ba_db="$1"
+    [ -f "$_ba_db" ] || return 0
+    awk '
+        BEGIN { RS=""; FS="\n" }
         {
             for (i = 1; i <= NF; i++) {
-                line = $i
-                colon = index(line, ":")
+                colon = index($i, ":")
                 if (colon == 0) continue
-                fk = substr(line, 1, colon - 1)
-                fv = substr(line, colon + 2)
-                if (fk == f && fv ~ /^[0-9]+$/) {
-                    if (fv + 0 > mx) mx = fv + 0
-                }
+                fk = substr($i, 1, colon - 1)
+                if (fk == "alias") { print substr($i, colon + 2); break }
             }
         }
-        END { print mx }
-    ' "$_bm_db" 2>/dev/null
-}
-
-# blockdb_list db_path -- prints all blocks verbatim (for display/listing).
-blockdb_list() {
-    _bl_db="$1"
-    [ -f "$_bl_db" ] || return 0
-    cat "$_bl_db"
+    ' "$_ba_db" 2>/dev/null
 }

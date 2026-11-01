@@ -7,10 +7,6 @@ reachable_ssh() {
     nc -z -w5 "$_rs_ip" "$_rs_port" >/dev/null 2>&1
 }
 
-reachable_cloud() {
-    has_cmd ping || return 0
-    ping -c 1 -W 3 github.com >/dev/null 2>&1
-}
 
 _get_host_key_fingerprint() {
     _hk_ip="$1"; _hk_port="${2:-22}"
@@ -21,21 +17,22 @@ _get_host_key_fingerprint() {
         | awk "{print \$2; exit}"
 }
 
-KNOWN_HOSTS="$HOME/.local/share/nina/known_hosts"
-
 known_hosts_remove_ip() {
-    _ip="$1"
-    [ -f "$KNOWN_HOSTS" ] || return 0
-    if has_cmd ssh-keygen; then
-        ssh-keygen -R "$_ip" -f "$KNOWN_HOSTS" >/dev/null 2>&1 || true
+    _ip="$1"; _port="${2:-22}"
+    _kh="$HOME/.ssh/known_hosts"
+    [ -f "$_kh" ] || return 0
+    has_cmd ssh-keygen || return 0
+    ssh-keygen -R "$_ip" -f "$_kh" >/dev/null 2>&1 || true
+    if [ "$_port" != "22" ]; then
+        ssh-keygen -R "[$_ip]:$_port" -f "$_kh" >/dev/null 2>&1 || true
     fi
-    log INFO "known_hosts: removed entries for $_ip"
+    log INFO "known_hosts: removed entries for $_ip (port $_port)"
 }
 
 known_hosts_sync_device() {
-    _alias="$1"; _old_ip="$2"; _new_ip="$3"
+    _alias="$1"; _old_ip="$2"; _new_ip="$3"; _port="${4:-22}"
     if [ "$_old_ip" != "$_new_ip" ]; then
         log INFO "device $_alias IP changed: $_old_ip -> $_new_ip"
-        known_hosts_remove_ip "$_old_ip"
+        known_hosts_remove_ip "$_old_ip" "$_port"
     fi
 }

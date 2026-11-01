@@ -66,25 +66,10 @@ _self_register() {
         return 0
     fi
 
-    _self_prev_hk=""
-    _self_blk_by_alias="$(blockdb_get "$BASE/state/ts-devices.db" alias "$_self_alias")"
-    if [ -n "$_self_blk_by_alias" ]; then
-        _self_prev_hk="$(blockdb_field "$_self_blk_by_alias" hostkey)"
-    fi
-    if [ -z "$_self_prev_hk" ] && command -v _get_host_key_fingerprint >/dev/null 2>&1; then
-        _self_prev_hk="$(_get_host_key_fingerprint 127.0.0.1 "$_self_port" 2>/dev/null || true)"
-    fi
-
-    _ts_db="$BASE/state/ts-devices.db"
-    [ -f "$_ts_db" ] || : > "$_ts_db"
-    _self_block_ts="$(printf "alias: %s\nip: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nnode_id: %s\n" \
-        "$_self_alias" "$_self_tailscale_ip" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" "${_self_prev_hk:-}" "$(node_id)")"
-    blockdb_upsert "$_ts_db" alias "$_self_alias" "$_self_block_ts"
-    log OK "self-registered $_self_alias ($_self_tailscale_ip)"
 
     if command -v node_alias_set >/dev/null 2>&1; then
         node_alias_set "$_self_alias" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" "$_self_tailscale_ip" || \
-            log WARN "node_alias_set failed -- registry.db not updated"
+            log WARN "node_alias_set failed -- nodes.db not updated"
     fi
     if command -v _node_config_save >/dev/null 2>&1; then
         _node_config_save "$_self_alias" "$_self_user" "$_self_port" "$_self_os" "$_self_kind" "$_self_root" || \

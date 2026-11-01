@@ -4,24 +4,16 @@
 
   TOP-LEVEL
 
-    nina                   Run the full pipeline: self-register + seed
-                           + bootstrap-keys + push.
-    nina self-register     Register this node identity in ts-devices.db
-                           and registry.db.
-    nina seed              Pull other nodes rows from the cloud registry.
+    nina                   Run the full pipeline: self-register + bootstrap-keys.
+    nina self-register     Register this node identity in nodes.db.
     nina bootstrap-keys    Distribute SSH keys to registered peers.
-    nina push              Sync ts-devices.db to all registered peers.
     nina status [--remote-only]
                            Emit "alias ip user port kind os", one node per line.
-                           kind: celular|computador. os: android|debian|...
                            The FIRST line is always the local node; every
-                           following line is a remote node. No header, no
-                           colors, no padding: four space-separated fields,
-                           stable and parseable.
-                           --remote-only omits the local line and emits the
-                           remote nodes only -- that is the source nya
-                           consumes. Exactly one of the two forms exists;
-                           there is no separate resolve subcommand.
+                           following line is an ACTIVE remote node.
+                           Suspended nodes are omitted from this view.
+                           --remote-only omits the local line and emits active
+                           remotes only -- the source nya consumes.
     nina status -h         Show the status contract.
     nina -h | --help       Show this help.
 
@@ -40,6 +32,8 @@
 
   DEVICE MANAGEMENT  (nina devices)
 
+    nina devices list                            Emit active nodes + local (nya consumes this).
+    nina devices all                             List every node with its state.
     nina devices add <alias> <ip> <user> [port]  Register manually.
     nina devices edit <alias>                    Edit device details.
     nina devices rename <old> <new>              Rename alias.
@@ -48,38 +42,26 @@
     nina devices refresh-ips                     Refresh local IP from tun0;
                                                  peers from tailscale CLI (jq)
                                                  if present.
-    nina devices push-vpn                        Sync ts-devices.db to peers.
-    nina devices rollback <alias>                Restore from snapshot.
-    nina devices resetall                        Wipe ts-devices.db + known_hosts.
+    nina devices suspend <alias>                 Mark suspended (excluded from status).
+    nina devices resume <alias>                  Mark active again.
     nina devices node-set <alias> [user] [port] [platform]
                                                  Set THIS node identity.
     nina devices node-add <node-id> <alias> <user> <port> <platform>
                                                  Register another node.
     nina devices registry-set <node-id> <alias> [user] [port] [platform]
-                                                 Edit any node in registry.
+                                                 Edit any node.
     nina devices hostkey-refresh                 Refresh SSH host keys.
-
-  ─────────────────────────────────────────────────────────────────────
-
-  CLIP (clipboard forwarding, tmux-backed)
 
   ─────────────────────────────────────────────────────────────────────
 
   NOTES
 
-    • Aliases are short names you assign manually during registration
-      (tx1, tx2, ...). No automatic suggestion.
-    • All tools resolve aliases from  $NINA_BASE/state/ts-devices.db
-    • registry.db (cloud source of identity) lives at
-      ~/.nina-registry/registry.db
-    • SSH config lives at             $NINA_BASE/config/ssh_config
-    • known_hosts lives at            ~/.local/share/nina/known_hosts
-    • Logs at                         $NINA_BASE/logs/nina.log
-
+    • Aliases are short names assigned manually (tx1, tx2, ...).
+    • Canonical registry: ~/.nina-registry/nodes.db (blockdb, git-backed).
+      Every node and its state (active|suspended) lives there.
+    • Any change to nodes.db is committed and pushed, then distributed to
+      every active node immediately via `nya @all`.
+    • When this node is suspended, `nina status` warns and offers to resume.
+    • SSH config lives at  $NINA_BASE/config/ssh_config
+    • Logs at              $NINA_BASE/logs/nina.log
     • Tailscale-only: peers are reached via their 100.x IP.
-      Without the tailscale CLI installed, peer IPs must be populated
-      once with: nina devices update-ip <alias> <ip>
-
-    • Identity is stable across reinstall: registry.sh reclaims the
-      alias when the local SSH hostkey matches an existing row.
-

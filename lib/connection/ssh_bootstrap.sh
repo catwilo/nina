@@ -1,5 +1,23 @@
 #!/bin/sh
 # ssh_bootstrap.sh -- distribute SSH pubkey to every registered tailscale peer.
+#
+# Self-contained: loads its own dependencies so any caller (nina, install.sh)
+# can invoke ssh_key_bootstrap without pre-sourcing other modules.
+
+_ssh_bootstrap_load_deps() {
+    command -v blockdb_get >/dev/null 2>&1 && \
+    command -v node_alias  >/dev/null 2>&1 && return 0
+    _sbd_here="$(cd "$(dirname "$0")" && pwd)"
+    for _sbd_mod in core/util.sh core/blockdb.sh core/network.sh identity/identity.sh; do
+        for _sbd_root in "$_sbd_here/.." "$HOME/.local/share/nina/lib"; do
+            [ -f "$_sbd_root/$_sbd_mod" ] || continue
+            # shellcheck source=/dev/null
+            . "$_sbd_root/$_sbd_mod"
+            break
+        done
+    done
+}
+_ssh_bootstrap_load_deps
 
 ssh_key_bootstrap() {
     _key="$HOME/.ssh/id_ed25519"
@@ -17,8 +35,8 @@ ssh_key_bootstrap() {
     chmod 600 "$_key" 2>/dev/null || true
     [ -f "$_pub" ] || { log WARN "no public key at $_pub"; return 0; }
 
-    _ts_db="$BASE/state/ts-devices.db"
-    [ -f "$_ts_db" ] && [ -s "$_ts_db" ] || { log INFO "no peers registered"; return 0; }
+    _db="$NODES_DB"
+    [ -f "$_db" ] && [ -s "$_db" ] || { log INFO "no peers registered"; return 0; }
     has_cmd nya || { log INFO "nya unavailable"; return 0; }
 
     _pubdata="$(cat "$_pub")"
@@ -33,19 +51,22 @@ ssh_key_bootstrap() {
                 if (fk == "alias") { print substr($i, colon + 2); break }
             }
         }
-    ' "$_ts_db")"
+    ' "$_db")"
 
     printf '%s\n' "$_aliases" | while IFS= read -r _ka; do
         [ -n "$_ka" ] || continue
         [ "$_ka" = "$_my_alias" ] && continue
+        _ka_blk="$(blockdb_get "$_db" alias "$_ka")"
+        _ka_st="$(blockdb_field "$_ka_blk" state)"; _ka_st="${_ka_st:-active}"
+        [ "$_ka_st" = "active" ] || continue
         # Precondition: SSH port reachable. The bootstrap job is to install
         # the key, so requiring nya (key auth) to succeed first is circular
         # and produces spurious "peer unreachable" warnings. reachable_ssh
         # only checks the TCP port, which is exactly what bootstrap needs.
-        _ka_ip="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" ip 2>/dev/null || true)"
-        _ka_port="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" port 2>/dev/null || true)"
+        _ka_ip="$(blockdb_field "$(blockdb_get "$_db" alias "$_ka")" ip 2>/dev/null || true)"
+        _ka_port="$(blockdb_field "$(blockdb_get "$_db" alias "$_ka")" port 2>/dev/null || true)"
         [ -n "$_ka_port" ] || _ka_port=22
-        _ka_user="$(blockdb_field "$(blockdb_get "$_ts_db" alias "$_ka")" user 2>/dev/null || true)"
+        _ka_user="$(blockdb_field "$(blockdb_get "$_db" alias "$_ka")" user 2>/dev/null || true)"
         [ -n "$_ka_user" ] || _ka_user=u
         if [ -n "$_ka_ip" ] && reachable_ssh "$_ka_ip" "$_ka_port"; then
             nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \

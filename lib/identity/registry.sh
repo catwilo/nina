@@ -23,9 +23,9 @@ _registry_write() {
         return 1
     fi
     _identity_registry_warn_once
-    _rw_dir="$(dirname "$REGISTRY_DB")"
+    _rw_dir="$(dirname "$NODES_DB")"
     mkdir -p "$_rw_dir" 2>/dev/null || true
-    [ -f "$REGISTRY_DB" ] || : > "$REGISTRY_DB"
+    [ -f "$NODES_DB" ] || : > "$NODES_DB"
 
     _rw_branch="chore/registry-${_rw_nid}"
     ( cd "$_rw_dir" && \
@@ -37,7 +37,7 @@ _registry_write() {
         return 1
     }
 
-    _rw_owner_blk="$(blockdb_get "$REGISTRY_DB" alias "$_rw_alias")"
+    _rw_owner_blk="$(blockdb_get "$NODES_DB" alias "$_rw_alias")"
     _rw_owner="$([ -n "$_rw_owner_blk" ] && blockdb_field "$_rw_owner_blk" node_id || printf '')"
     _rw_owner_hk="$([ -n "$_rw_owner_blk" ] && blockdb_field "$_rw_owner_blk" hostkey || printf '')"
 
@@ -61,11 +61,13 @@ _registry_write() {
                 "$_rw_alias" "$_rw_owner" "$_rw_owner_hk" >&2
             return 1
         fi
-        blockdb_remove "$REGISTRY_DB" alias "$_rw_alias"
+        blockdb_remove "$NODES_DB" alias "$_rw_alias"
     fi
 
     _rw_prev_hk=""
-    _rw_prev_row="$(blockdb_get "$REGISTRY_DB" node_id "$_rw_nid")"
+    _rw_prev_row="$(blockdb_get "$NODES_DB" node_id "$_rw_nid")"
+    _rw_prev_state="$(blockdb_field "$_rw_prev_row" state)"
+    _rw_state="${_rw_prev_state:-active}"
     [ -n "$_rw_prev_row" ] && _rw_prev_hk="$(blockdb_field "$_rw_prev_row" hostkey)"
 
     _rw_hk="$_rw_prev_hk"
@@ -75,15 +77,15 @@ _registry_write() {
     fi
 
     _rw_current="$_rw_prev_row"
-    _rw_target="$(printf 'node_id: %s\nalias: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nip: %s\n' \
-        "$_rw_nid" "$_rw_alias" "$_rw_user" "$_rw_port" "$_rw_os" "$_rw_kind" "$_rw_root" "${_rw_hk:-}" "${_rw_ip:-}")"
+    _rw_target="$(printf 'node_id: %s\nalias: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nip: %s\nstate: %s\n' \
+        "$_rw_nid" "$_rw_alias" "$_rw_user" "$_rw_port" "$_rw_os" "$_rw_kind" "$_rw_root" "${_rw_hk:-}" "${_rw_ip:-}" "$_rw_state")"
 
     if [ "$_rw_current" = "$_rw_target" ]; then
         :
     else
-        blockdb_upsert "$REGISTRY_DB" node_id "$_rw_nid" "$_rw_target"
+        blockdb_upsert "$NODES_DB" node_id "$_rw_nid" "$_rw_target"
         ( cd "$_rw_dir" && \
-          git add registry.db && \
+          git add nodes.db && \
           git commit -m "chore(registry): set alias ${_rw_alias} for node ${_rw_nid}" && \
           git push -u origin "$_rw_branch" --force-with-lease && \
           git checkout main && \
@@ -91,7 +93,7 @@ _registry_write() {
           git push origin main && \
           git branch -d "$_rw_branch" && \
           git push origin --delete "$_rw_branch" ) || {
-            printf '[ERROR] _registry_write: registry.db written locally but commit/push/merge failed -- resolve manually in %s (branch: %s)\n' \
+            printf '[ERROR] _registry_write: nodes.db written locally but commit/push/merge failed -- resolve manually in %s (branch: %s)\n' \
                 "$_rw_dir" "$_rw_branch" >&2
             return 1
         }
@@ -119,65 +121,33 @@ registry_row_by_alias() {
     _rrba_alias="$1"
     [ -n "$_rrba_alias" ] || return 0
     _identity_registry_warn_once
-    [ -f "$REGISTRY_DB" ] || return 0
-    blockdb_get "$REGISTRY_DB" alias "$_rrba_alias"
+    [ -f "$NODES_DB" ] || return 0
+    blockdb_get "$NODES_DB" alias "$_rrba_alias"
 }
 
-registry_row_by_hostkey() {
-    _rrbh_hk="$1"
-    [ -n "$_rrbh_hk" ] || return 0
-    _identity_registry_warn_once
-    [ -f "$REGISTRY_DB" ] || return 0
-    blockdb_get "$REGISTRY_DB" hostkey "$_rrbh_hk"
-}
 
 _distribute_registry() {
-    _dr_devdb="$BASE/state/ts-devices.db"
-    [ -f "$REGISTRY_DB" ] || return 0
-    has_cmd nya || { log WARN "nya not found -- registry not distributed"; return 0; }
-    [ -f "$_dr_devdb" ] || return 0
-    _dr_local_head="$(cd "$(dirname "$REGISTRY_DB")" 2>/dev/null && git rev-parse HEAD 2>/dev/null)"
-    _my_alias="$(node_alias 2>/dev/null || printf '')"
-    _dr_aliases="$(awk '
-        BEGIN { RS=""; FS="\n" }
-        {
-            for (i = 1; i <= NF; i++) {
-                colon = index($i, ":")
-                if (colon == 0) continue
-                fk = substr($i, 1, colon - 1)
-                if (fk == "alias") { print substr($i, colon + 2); break }
-            }
-        }
-    ' "$_dr_devdb" 2>/dev/null)"
-    printf '%s\n' "$_dr_aliases" | while IFS= read -r _na; do
-        [ -n "$_na" ] || continue
-        [ "$_na" = "$_my_alias" ] && continue
-        _nblk="$(blockdb_get "$_dr_devdb" alias "$_na")"
-        [ -n "$_nblk" ] || continue
-        _nip="$(blockdb_field "$_nblk" ip)"
-        _nport="$(blockdb_field "$_nblk" port)"
-        [ -n "$_nport" ] || _nport=8022
-        [ -n "$_nip" ] || { log WARN "registry -> $_na skipped (no ip)"; continue; }
-        if ! reachable_ssh "$_nip" "$_nport"; then
-            log WARN "registry -> $_na skipped (unreachable: $_nip:$_nport)"
-            continue
-        fi
-        # -m mix + strip the "[alias] " prefix: nya may render per-line
-        # prefixes depending on mode, and comparing them to the bare hash
-        # produced false DIFF warnings.
-        # Force main: a previous _registry_write on this peer may have
-        # left a chore/registry-* branch checked out, and pull --rebase
-        # origin main fails on a non-main branch. checkout -B main resets
-        # the local main to origin/main regardless of the current branch.
-        _dr_remote_head="$(nya -m mix "$_na" "cd ~/.nina-registry 2>/dev/null && git fetch origin >/dev/null 2>&1 && git checkout -B main origin/main >/dev/null 2>&1 && git rev-parse HEAD 2>/dev/null" 2>/dev/null | sed "s/^\[$_na\] //")"
-        if [ -z "$_dr_remote_head" ]; then
-            log WARN "registry pull on $_na failed"
-            continue
-        fi
-        if [ -n "$_dr_local_head" ] && [ "$_dr_remote_head" = "$_dr_local_head" ]; then
-            log OK "registry synced -> $_na (MATCH $_dr_remote_head)"
-        else
-            log WARN "registry synced -> $_na (DIFF: local=${_dr_local_head:-?} remote=$_dr_remote_head)"
-        fi
-    done
+    [ -f "$NODES_DB" ] || return 0
+    has_cmd nya || { log WARN "nya not found -- nodes.db not distributed"; return 0; }
+    has_cmd python3 || { log WARN "python3 not found -- cannot summarize distribution"; return 0; }
+    _dr_json="$(nya -m json @all "cd ~/.nina-registry && git pull --rebase origin main")" || true
+    _dr_out="$(printf '%s' "$_dr_json" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+if not d.get("workers"):
+    print("EMPTY")
+    sys.exit(0)
+bad = [w["alias"] for w in d["workers"] if w.get("exit", 0) != 0]
+print(" ".join(bad))
+')"
+    if [ "$_dr_out" = "EMPTY" ]; then
+        log INFO "no active peers -- nodes.db distribution deferred"
+    elif [ -n "$_dr_out" ]; then
+        log WARN "nodes.db NOT converged on: $_dr_out -- rerun when reachable"
+    else
+        log OK "nodes.db distributed to every active peer"
+    fi
 }
