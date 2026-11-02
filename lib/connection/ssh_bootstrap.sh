@@ -53,38 +53,86 @@ ssh_key_bootstrap() {
         }
     ' "$_db")"
 
-    printf '%s\n' "$_aliases" | while IFS= read -r _ka; do
+    # Fan-out paralelo por peer: cada worker maneja un nodo (probe TCP,
+    # append del pubkey local, fetch del pubkey remoto) y escribe un
+    # archivo de resultado por peer. El padre agrega los resultados en
+    # orden estable. El append al authorized_keys LOCAL se hace en el
+    # padre (despues del wait) porque workers concurrentes competirian
+    # por el mismo archivo sin lock.
+    _sig_dir="$(mktemp -d "${TMPDIR:-/tmp}/nina-bootstrap.XXXXXX")"
+    _remote_pubs_dir="$_sig_dir/pubs"
+    mkdir -p "$_remote_pubs_dir"
+    printf '%s\n' "$_aliases" > "$_sig_dir/aliases"
+
+    _pids=""
+    while IFS= read -r _ka; do
         [ -n "$_ka" ] || continue
         [ "$_ka" = "$_my_alias" ] && continue
         _ka_blk="$(blockdb_get "$_db" alias "$_ka")"
+        [ -n "$_ka_blk" ] || continue
         _ka_st="$(blockdb_field "$_ka_blk" state)"; _ka_st="${_ka_st:-active}"
         [ "$_ka_st" = "active" ] || continue
-        # Precondition: SSH port reachable. The bootstrap job is to install
-        # the key, so requiring nya (key auth) to succeed first is circular
-        # and produces spurious "peer unreachable" warnings. reachable_ssh
-        # only checks the TCP port, which is exactly what bootstrap needs.
-        _ka_ip="$(blockdb_field "$(blockdb_get "$_db" alias "$_ka")" ip 2>/dev/null || true)"
-        _ka_port="$(blockdb_field "$(blockdb_get "$_db" alias "$_ka")" port 2>/dev/null || true)"
+        _ka_ip="$(blockdb_field "$_ka_blk" ip 2>/dev/null || true)"
+        _ka_port="$(blockdb_field "$_ka_blk" port 2>/dev/null || true)"
         [ -n "$_ka_port" ] || _ka_port=22
-        _ka_user="$(blockdb_field "$(blockdb_get "$_db" alias "$_ka")" user 2>/dev/null || true)"
+        _ka_user="$(blockdb_field "$_ka_blk" user 2>/dev/null || true)"
         [ -n "$_ka_user" ] || _ka_user=u
-        if [ -n "$_ka_ip" ] && reachable_ssh "$_ka_ip" "$_ka_port"; then
-            nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1 \
-                && log OK "key ensured on $_ka" \
-                || log WARN "key append to $_ka failed"
-            _remote_pub="$(nya "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
-            if [ -n "$_remote_pub" ]; then
-                mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
-                grep -qxF "$_remote_pub" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_remote_pub" >> ~/.ssh/authorized_keys
-                log OK "remote key from $_ka installed locally"
+        _rc_file="$_sig_dir/$_ka.rc"
+        _pub_file="$_remote_pubs_dir/$_ka.pub"
+
+        (
+            if [ -z "$_ka_ip" ] || ! reachable_ssh "$_ka_ip" "$_ka_port"; then
+                printf 'unreachable\t%s\t%s\t%s\t%s\n' "$_ka" "$_ka_ip" "$_ka_port" "$_ka_user" > "$_rc_file"
+                exit 0
             fi
-        else
-            # TCP reachable but key auth failed: this is the circular
-            # bootstrap case (nya needs a key to install a key). Print the
-            # exact one-shot remediation instead of a vague warning, so
-            # the user can break the loop in one command per peer.
-            log WARN "peer $_ka reachable but key auth failed -- run once:"
-            log WARN "  ssh-copy-id -p ${_ka_port:-8022} ${_ka_user:-u}@${_ka_ip}"
-        fi
+            if nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1; then
+                _remote_pub="$(nya "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
+                if [ -n "$_remote_pub" ]; then
+                    printf '%s\n' "$_remote_pub" > "$_pub_file"
+                    printf 'ok\t%s\n' "$_ka" > "$_rc_file"
+                else
+                    printf 'ok-no-pub\t%s\n' "$_ka" > "$_rc_file"
+                fi
+            else
+                printf 'auth-failed\t%s\t%s\t%s\t%s\n' "$_ka" "$_ka_ip" "$_ka_port" "$_ka_user" > "$_rc_file"
+            fi
+        ) &
+        _pids="$_pids $!"
+    done < "$_sig_dir/aliases"
+
+    for _p in $_pids; do
+        wait "$_p" || true
     done
+
+    # Agregar resultados en orden estable (alfabetico por alias).
+    # find|sort a archivo: <(...) es bash-only, el modulo corre bajo sh.
+    find "$_sig_dir" -maxdepth 1 -name '*.rc' -print | sort > "$_sig_dir/rc-list"
+    while IFS= read -r _rc; do
+        [ -f "$_rc" ] || continue
+        IFS=$'\t' read -r _st _a _ip _port _user < "$_rc"
+        case "$_st" in
+            ok)
+                log OK "key ensured on $_a"
+                _pf="$_remote_pubs_dir/$_a.pub"
+                if [ -s "$_pf" ]; then
+                    mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
+                    _rp="$(cat "$_pf")"
+                    grep -qxF "$_rp" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_rp" >> ~/.ssh/authorized_keys
+                    log OK "remote key from $_a installed locally"
+                fi
+                ;;
+            ok-no-pub)
+                log OK "key ensured on $_a"
+                ;;
+            auth-failed)
+                log WARN "peer $_a reachable but key auth failed -- run once:"
+                log WARN "  ssh-copy-id -p ${_port:-8022} ${_user:-u}@${_ip}"
+                ;;
+            unreachable)
+                log WARN "peer $_a unreachable (${_ip}:${_port})"
+                ;;
+        esac
+    done < "$_sig_dir/rc-list"
+
+    rm -rf "$_sig_dir"
 }
