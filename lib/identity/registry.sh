@@ -57,9 +57,27 @@ _registry_write() {
                 "$_rw_alias" >&2
         fi
         if [ "$_rw_can_claim" -eq 0 ]; then
-            printf '[ERROR] _registry_write: alias "%s" already registered to node %s (hostkey %s) -- genuine collision\n' \
-                "$_rw_alias" "$_rw_owner" "$_rw_owner_hk" >&2
-            return 1
+            _rw_owner_ip="$(blockdb_field "$_rw_owner_blk" ip)"
+            printf '[WARN] _registry_write: alias "%s" already registered to node %s (hostkey %s, ip %s)\n' \
+                "$_rw_alias" "$_rw_owner" "$_rw_owner_hk" "${_rw_owner_ip:--}" >&2
+            printf '[WARN] _registry_write: likely a reinstalled machine; overwriting replaces that row for node %s\n' \
+                "$_rw_nid" >&2
+            _rw_ans="${NINA_OVERWRITE_ALIAS:-}"
+            if [ -z "$_rw_ans" ] && [ -t 0 ] && [ -t 2 ]; then
+                printf 'overwrite alias "%s" with this node? [y/N]: ' "$_rw_alias" >&2
+                read -r _rw_ans </dev/tty || _rw_ans=""
+            fi
+            case "$_rw_ans" in
+                y|Y|yes|YES)
+                    printf '[INFO] _registry_write: overwriting alias "%s"\n' "$_rw_alias" >&2
+                    ;;
+                *)
+                    printf '[ERROR] _registry_write: alias "%s" not overwritten (rerun interactively, or set NINA_OVERWRITE_ALIAS=yes)\n' \
+                        "$_rw_alias" >&2
+                    ( cd "$_rw_dir" && git checkout -q main && git branch -D "$_rw_branch" ) >/dev/null 2>&1 || true
+                    return 1
+                    ;;
+            esac
         fi
         blockdb_remove "$NODES_DB" alias "$_rw_alias"
     fi

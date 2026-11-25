@@ -93,3 +93,27 @@ _seed_self() {
     _local_head="$(git -C "$REGISTRY_DIR" rev-parse main)"
     [ "$_remote_head" = "$_local_head" ]
 }
+
+_seed_foreign_alias() {
+    printf '\nnode_id: nid-old\nalias: db1\nuser: u\nport: 8022\nos: debian\nkind: server\nroot: no\nhostkey: SHA256:oldkey\nip: 10.0.0.3\nstate: active\n' >> "$NODES_DB"
+    git -C "$REGISTRY_DIR" add nodes.db
+    git -C "$REGISTRY_DIR" commit -q -m "seed"
+    git -C "$REGISTRY_DIR" push -q origin main
+}
+
+@test "registry_write: genuine collision without consent aborts and restores main" {
+    _seed_foreign_alias
+    run _registry_write "nid-new" db1 u 22 debian server no 10.0.0.9
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not overwritten"* ]]
+    [ "$(blockdb_field "$(blockdb_get "$NODES_DB" alias db1)" node_id)" = "nid-old" ]
+    [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
+}
+
+@test "registry_write: genuine collision with NINA_OVERWRITE_ALIAS=yes replaces the row" {
+    _seed_foreign_alias
+    NINA_OVERWRITE_ALIAS=yes run _registry_write "nid-new" db1 u 22 debian server no 10.0.0.9
+    [ "$status" -eq 0 ]
+    [ "$(blockdb_field "$(blockdb_get "$NODES_DB" alias db1)" node_id)" = "nid-new" ]
+    [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
+}
