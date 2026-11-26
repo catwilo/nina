@@ -140,3 +140,12 @@ _seed_foreign_alias() {
     [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
     [ -z "$(git -C "$REGISTRY_DIR" branch --list 'chore/*')" ]
 }
+
+@test "host key fingerprint: asks ssh-keyscan for ed25519 only" {
+    ssh-keyscan() { printf '%s\n' "$*" > "$BATS_TEST_TMPDIR/keyscan.args"; }
+    ssh-keygen() { cat > /dev/null; printf '256 SHA256:fakekey host (ED25519)\n'; }
+    run _get_host_key_fingerprint 127.0.0.1 22
+    [ "$status" -eq 0 ]
+    [ "$output" = "SHA256:fakekey" ]
+    [[ "$(cat "$BATS_TEST_TMPDIR/keyscan.args")" == *"-t ed25519"* ]]
+}

@@ -12,7 +12,7 @@ _get_host_key_fingerprint() {
     _hk_ip="$1"; _hk_port="${2:-22}"
     has_cmd ssh-keyscan || return 0
     has_cmd ssh-keygen  || return 0
-    ssh-keyscan -p "$_hk_port" -T 3 "$_hk_ip" 2>/dev/null \
+    ssh-keyscan -t ed25519 -p "$_hk_port" -T 3 "$_hk_ip" 2>/dev/null \
         | ssh-keygen -lf - 2>/dev/null \
         | awk "{print \$2; exit}"
 }
