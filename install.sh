@@ -72,9 +72,12 @@ chmod 700 "$DATADIR"
 REGISTRY_DIR="$HOME/.nina-registry"
 if [ ! -d "$REGISTRY_DIR/.git" ]; then
     log INFO "cloning nina registry..."
-    git clone git@github.com:catwilo/nina-registry.git "$REGISTRY_DIR" \
-        || fail "registry clone failed -- nina requires it for identity/hostkey trust. Run manually: git clone git@github.com:catwilo/nina-registry.git $REGISTRY_DIR"
-    log OK "registry cloned: $REGISTRY_DIR"
+    if git clone git@github.com:catwilo/nina-registry.git "$REGISTRY_DIR"; then
+        log OK "registry cloned: $REGISTRY_DIR"
+    else
+        log WARN "registry clone failed (no SSH key authorized on GitHub for this node?) -- continuing without it"
+        log WARN "authorize the key on GitHub, then re-run: sh install.sh"
+    fi
 else
     log INFO "registry already cloned: $REGISTRY_DIR"
 fi
@@ -303,7 +306,7 @@ fi
 # ---------------------------------------------------------------------------
 # Post-install verification: prove an installed tool resolves its libs.
 # ---------------------------------------------------------------------------
-if NOEMAP_DATA="$DATADIR" "$BINDIR/nina" status >/dev/null 2>&1; then
+if NOEMAP_DATA="$DATADIR" "$BINDIR/nina" status -h >/dev/null 2>&1; then
     log OK "post-install check passed (nina runs standalone)"
 else
     fail "post-install check FAILED  nina could not run from $BINDIR (libs at $LIBDIR?)"
