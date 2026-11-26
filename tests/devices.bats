@@ -128,3 +128,15 @@ _seed_foreign_alias() {
     [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
     [ -z "$(git -C "$REGISTRY_DIR" branch --list 'chore/*')" ]
 }
+
+@test "registry_write: empty ip keeps the previous ip of the row" {
+    _seed_node db1 10.0.0.3 active
+    git -C "$REGISTRY_DIR" add nodes.db
+    git -C "$REGISTRY_DIR" commit -q -m "seed"
+    git -C "$REGISTRY_DIR" push -q origin main
+    run _registry_write "nid-db1" db1 u 8022 android phone no
+    [ "$status" -eq 0 ]
+    [ "$(blockdb_field "$(blockdb_get "$NODES_DB" alias db1)" ip)" = "10.0.0.3" ]
+    [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
+    [ -z "$(git -C "$REGISTRY_DIR" branch --list 'chore/*')" ]
+}

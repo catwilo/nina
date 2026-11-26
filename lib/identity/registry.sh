@@ -95,6 +95,9 @@ _registry_write() {
     fi
 
     _rw_current="$_rw_prev_row"
+    if [ -z "${_rw_ip:-}" ] && [ -n "$_rw_prev_row" ]; then
+        _rw_ip="$(blockdb_field "$_rw_prev_row" ip)"
+    fi
     _rw_target="$(printf 'node_id: %s\nalias: %s\nuser: %s\nport: %s\nos: %s\nkind: %s\nroot: %s\nhostkey: %s\nip: %s\nstate: %s\n' \
         "$_rw_nid" "$_rw_alias" "$_rw_user" "$_rw_port" "$_rw_os" "$_rw_kind" "$_rw_root" "${_rw_hk:-}" "${_rw_ip:-}" "$_rw_state")"
 
