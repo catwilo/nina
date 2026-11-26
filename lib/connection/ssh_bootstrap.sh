@@ -26,7 +26,7 @@ ssh_key_bootstrap() {
     if [ ! -f "$_key" ]; then
         if has_cmd ssh-keygen; then
             ssh-keygen -t ed25519 -N "" -f "$_key" -C "nina@$(hostname 2>/dev/null || echo node)" >/dev/null 2>&1 \
-                && log OK "generated ssh key: $_key" \
+                && log OK "generated ssh key: $_key (no passphrase by design: nya runs unattended)" \
                 || { log WARN "ssh-keygen failed"; return 0; }
         else
             log WARN "ssh-keygen not found"; return 0
@@ -105,6 +105,8 @@ ssh_key_bootstrap() {
     done
 
     # Agregar resultados en orden estable (alfabetico por alias).
+    _sb_tty=0
+    if [ -t 0 ] && [ -t 1 ]; then _sb_tty=1; fi
     # find|sort a archivo: <(...) es bash-only, el modulo corre bajo sh.
     find "$_sig_dir" -maxdepth 1 -name '*.rc' -print | sort > "$_sig_dir/rc-list"
     while IFS= read -r _rc; do
@@ -127,6 +129,21 @@ ssh_key_bootstrap() {
             auth-failed)
                 log WARN "peer $_a reachable but key auth failed -- run once:"
                 log WARN "  ssh-copy-id -p ${_port:-8022} ${_user:-u}@${_ip}"
+                if [ "$_sb_tty" -eq 1 ] && has_cmd ssh-copy-id; then
+                    printf 'run ssh-copy-id for %s now? [y/N] ' "$_a" >&2
+                    _sc_ans=""
+                    read -r _sc_ans </dev/tty || _sc_ans=""
+                    case "$_sc_ans" in
+                        [yY]|[yY][eE][sS])
+                            if ssh-copy-id -p "${_port:-8022}" -i "$_pub" "${_user:-u}@${_ip}" </dev/tty; then
+                                log OK "key installed on $_a via ssh-copy-id"
+                            else
+                                log WARN "ssh-copy-id failed for $_a"
+                            fi
+                            ;;
+                        *) log INFO "ssh-copy-id skipped for $_a" ;;
+                    esac
+                fi
                 ;;
             unreachable)
                 log WARN "peer $_a unreachable (${_ip}:${_port})"

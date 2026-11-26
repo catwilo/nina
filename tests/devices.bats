@@ -149,3 +149,18 @@ _seed_foreign_alias() {
     [ "$output" = "SHA256:fakekey" ]
     [[ "$(cat "$BATS_TEST_TMPDIR/keyscan.args")" == *"-t ed25519"* ]]
 }
+
+@test "registry_write: keeps the previous hostkey when the scan returns nothing" {
+    _nid="$(node_id)"
+    printf 'node_id: %s\nalias: db2\nuser: u\nport: 8022\nos: debian\nkind: laptop\nroot: no\nhostkey: SHA256:prevkey\nip: 10.0.0.5\nstate: active\n' "$_nid" >> "$NODES_DB"
+    git -C "$REGISTRY_DIR" add nodes.db
+    git -C "$REGISTRY_DIR" commit -q -m "seed"
+    git -C "$REGISTRY_DIR" push -q origin main
+    _before="$(git -C "$REGISTRY_DIR" rev-parse HEAD)"
+    _get_host_key_fingerprint() { return 0; }
+    run _registry_write "$_nid" db2 u 8022 debian laptop no 10.0.0.5
+    [ "$status" -eq 0 ]
+    [ "$(blockdb_field "$(blockdb_get "$NODES_DB" alias db2)" hostkey)" = "SHA256:prevkey" ]
+    [ "$(git -C "$REGISTRY_DIR" rev-parse HEAD)" = "$_before" ]
+    [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
+}
