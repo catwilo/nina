@@ -117,3 +117,14 @@ _seed_foreign_alias() {
     [ "$(blockdb_field "$(blockdb_get "$NODES_DB" alias db1)" node_id)" = "nid-new" ]
     [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
 }
+
+@test "registry_write: unchanged row restores main and drops the chore branch" {
+    _seed_node db1 10.0.0.3 active
+    git -C "$REGISTRY_DIR" add nodes.db
+    git -C "$REGISTRY_DIR" commit -q -m "seed"
+    git -C "$REGISTRY_DIR" push -q origin main
+    run _registry_write "nid-db1" db1 u 8022 android phone no 10.0.0.3
+    [ "$status" -eq 0 ]
+    [ "$(git -C "$REGISTRY_DIR" branch --show-current)" = "main" ]
+    [ -z "$(git -C "$REGISTRY_DIR" branch --list 'chore/*')" ]
+}

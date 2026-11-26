@@ -99,7 +99,7 @@ _registry_write() {
         "$_rw_nid" "$_rw_alias" "$_rw_user" "$_rw_port" "$_rw_os" "$_rw_kind" "$_rw_root" "${_rw_hk:-}" "${_rw_ip:-}" "$_rw_state")"
 
     if [ "$_rw_current" = "$_rw_target" ]; then
-        :
+        ( cd "$_rw_dir" && git checkout -q main && git branch -D "$_rw_branch" ) >/dev/null 2>&1 || true
     else
         blockdb_upsert "$NODES_DB" node_id "$_rw_nid" "$_rw_target"
         ( cd "$_rw_dir" && \
