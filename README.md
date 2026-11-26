@@ -33,9 +33,9 @@ All commands accept `-h`.
 - `nina devices edit|rename|remove|update-ip|refresh-ips|rollback`
 - `nina devices push-vpn`
 - `nina devices resetall`
-- `nina devices node-set <alias> [user] [port] [platform]`
-- `nina devices node-add <node-id> <alias> <user> <port> <platform>`
-- `nina devices registry-set <node-id> <alias> [user] [port] [platform]`
+- `nina devices node-set <alias> [user] [port] [os] [kind] [root]`
+- `nina devices node-add <node-id> <alias> <user> <port> <os> <kind> <root>`
+- `nina devices registry-set <node-id> <alias> [user] [port] [os] [kind] [root]`
 - `nina devices hostkey-refresh`
 
 ### Remote execution

@@ -44,11 +44,11 @@
                                                  if present.
     nina devices suspend <alias>                 Mark suspended (excluded from status).
     nina devices resume <alias>                  Mark active again.
-    nina devices node-set <alias> [user] [port] [platform]
+    nina devices node-set <alias> [user] [port] [os] [kind] [root]
                                                  Set THIS node identity.
-    nina devices node-add <node-id> <alias> <user> <port> <platform>
+    nina devices node-add <node-id> <alias> <user> <port> <os> <kind> <root>
                                                  Register another node.
-    nina devices registry-set <node-id> <alias> [user] [port] [platform]
+    nina devices registry-set <node-id> <alias> [user] [port] [os] [kind] [root]
                                                  Edit any node.
     nina devices hostkey-refresh                 Refresh SSH host keys.
 
