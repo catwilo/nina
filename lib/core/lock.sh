@@ -1,5 +1,5 @@
 #!/bin/sh
-# lock.sh — session-scoped exclusive lock for noemap
+# lock.sh -- session-scoped exclusive lock for nina
 #
 # Design:
 #   • Lock dir lives under BASE/tmp (session-local, not system /tmp).
@@ -12,7 +12,7 @@ _LOCK_DIR=""
 _LOCK_PID_FILE=""
 
 acquire_lock() {
-    _LOCK_DIR="$BASE/tmp/noemap.lock"
+    _LOCK_DIR="$BASE/tmp/nina.lock"
     _LOCK_PID_FILE="$_LOCK_DIR/pid"
 
     # Stale lock recovery: lock dir exists but PID is gone
@@ -38,7 +38,7 @@ acquire_lock() {
     # Atomic acquisition via mkdir
     if ! mkdir "$_LOCK_DIR" 2>/dev/null; then
         _running_pid="$(cat "$_LOCK_PID_FILE" 2>/dev/null || printf 'unknown')"
-        log ERROR "noemap is already running (pid=$_running_pid)"
+        log ERROR "nina is already running (pid=$_running_pid)"
         exit 1
     fi
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# identity.sh -- stable per-node identity for noemap.
+# identity.sh -- stable per-node identity for nina.
 #
 # Provides a single 16-hex node-id per device, uniform across Debian, Termux,
 # Arch and Windows. The id derives from a filesystem seed (NOT hardware), so a
@@ -17,11 +17,10 @@
 # node-id -> canonical alias:
 #   NODE_ID|ALIAS|USER|PORT
 # It is the source of truth for "who is this device", independent of IP.
-# The registry lives in its own git-backed repo (github.com:catwilo/noemap-
-# registry, cloned to $HOME/.noemap-registry) so identity survives a node
-# reformat/reinstall via git, independent of any single node being reachable
-# (miko-task#102 precondition; see noemap#51). NODES_DB can still be
-# overridden via env var for tests or alternate setups.
+# The registry lives in its own git-backed repo (github.com:catwilo/nina-
+# registry, cloned to $HOME/.nina-registry) so identity survives a node
+# reformat/reinstall via git, independent of any single node being reachable.
+# NODES_DB can still be overridden via env var for tests or alternate setups.
 
 # _identity_load_deps -- carga las dependencias de este modulo desde LIB.
 #
@@ -55,15 +54,45 @@ _identity_load_deps() {
 }
 _identity_load_deps
 
-# _identity_statedir -- resolve the state dir consistently with the rest of noemap.
-_identity_statedir() {
+# _identity_statedir_candidates -- all plausible state dirs, most specific first.
+# nina/state is the canonical state location. Legacy $NOEMAP_DATA and $BASE
+# stay as overrides so tests and non-standard deployments can point elsewhere.
+_identity_statedir_candidates() {
     if [ -n "${NOEMAP_DATA:-}" ] && [ -d "$NOEMAP_DATA" ]; then
         printf '%s\n' "$NOEMAP_DATA/state"
-    elif [ -n "${BASE:-}" ] && [ -d "$BASE/state" ]; then
-        printf '%s\n' "$BASE/state"
-    else
-        printf '%s\n' "$HOME/.local/share/noemap/state"
     fi
+    if [ -n "${BASE:-}" ] && [ -d "$BASE/state" ]; then
+        printf '%s\n' "$BASE/state"
+    fi
+    printf '%s\n' "$HOME/.local/share/nina/state"
+}
+
+# _identity_statedir -- resolve the state dir consistently with the rest of nina.
+# Returns the first candidate that exists, or the canonical default.
+_identity_statedir() {
+    _isc_first=""
+    _isc_found=""
+    for _isc_c in $(_identity_statedir_candidates); do
+        [ -n "$_isc_first" ] || _isc_first="$_isc_c"
+        if [ -d "$_isc_c" ]; then
+            _isc_found="$_isc_c"
+            break
+        fi
+    done
+    printf '%s\n' "${_isc_found:-$_isc_first}"
+}
+
+# _node_config_load -- prints "ALIAS|USER|PORT" from the local cache file,
+# or nothing if absent/empty. Tries every state dir candidate so a node
+# whose cache lives in a legacy path still resolves its own alias.
+_node_config_load() {
+    for _ncl_dir in $(_identity_statedir_candidates); do
+        _ncl_file="$_ncl_dir/node-config"
+        [ -s "$_ncl_file" ] || continue
+        head -n1 "$_ncl_file" 2>/dev/null
+        return 0
+    done
+    return 0
 }
 
 # _identity_registry_default -- default path for the git-backed registry repo.
@@ -79,15 +108,9 @@ MACHINE_SEED="${MACHINE_SEED:-$(_identity_statedir)/machine-seed}"
 # access to the master registry (or a fresh clone not yet pulled) still
 # knows who it is. Master registry (NODES_DB) remains source of truth
 # whenever reachable; this file is the fallback, and is kept in sync with
-# it on every successful node_alias_set() (miko-task noemap#295).
+# it on every successful node_alias_set() (miko-task nina#295).
 NODE_CONFIG="${NODE_CONFIG:-$(_identity_statedir)/node-config}"
 
-# _node_config_load -- prints "ALIAS|USER|PORT" from the local cache file,
-# or nothing if absent/empty.
-_node_config_load() {
-    [ -s "$NODE_CONFIG" ] || return 0
-    head -n1 "$NODE_CONFIG" 2>/dev/null
-}
 
 # _node_config_save ALIAS USER PORT -- writes the local cache file via
 # mkit's atomic flow. Best-effort: a failure here does not block the
@@ -165,7 +188,7 @@ _sha256() {
 
 # _local_ips -- every IPv4 address bound to this device (one per line).
 # Used to guarantee distribution never targets the local machine, regardless
-# of whether MY_IP is exported (e.g. when ndevs runs outside a noemap scan).
+# of whether MY_IP is exported (e.g. when ndevs runs outside a nina scan).
 _local_ips() {
     # ifconfig with NO arguments is the only enumeration that works on Termux/
     # Android without root (ip -4 addr show / /proc/net/dev are permission-denied).
@@ -327,6 +350,6 @@ node_registry_row() {
 # pushes the registry repo (fixed branch chore/registry-<node-id>,
 # ff-only merge -- fails loud instead of a silent merge commit on
 # divergence), then distributes to every reachable node.
-# Fix noemap#407: the working-tree branch is created and rebased onto
+# Fix nina#407: the working-tree branch is created and rebased onto
 # origin/main FIRST, before mkit write ever touches nodes.db, so the
 # later 'git pull --rebase' never runs against a dirty tree.

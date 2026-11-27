@@ -36,3 +36,11 @@ _seed_self() {
     printf 'WRONG|u|8022|android|phone|no\n' > "$NODE_CONFIG"
     [ "$(node_alias)" = "tx2" ]
 }
+
+@test "node_alias: cache in nina/state found when BASE override absent" {
+    unset BASE
+    NODE_CONFIG="$HOME/.local/share/nina/state/node-config"
+    mkdir -p "$(dirname "$NODE_CONFIG")"
+    printf 'tx2|u|8022|android|phone|no\n' > "$NODE_CONFIG"
+    [ "$(node_alias)" = "tx2" ]
+}
