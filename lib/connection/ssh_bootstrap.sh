@@ -19,6 +19,21 @@ _ssh_bootstrap_load_deps() {
 }
 _ssh_bootstrap_load_deps
 
+# _sb_clean_pubkey -- stdin: text that may carry the render prefix nya
+# adds to captured lines ("[alias] "). stdout: the first line that is a
+# valid ssh public key, prefix removed. Returns 1 when there is none.
+_sb_clean_pubkey() {
+    _scp_tmp="$(mktemp "${TMPDIR:-/tmp}/nina-pub.XXXXXX")" || return 1
+    sed 's/^\[[^]]*\] //' | grep -m1 -E '^(ssh-[a-z0-9]+|ecdsa-sha2-[a-z0-9]+|sk-[a-z0-9@.-]+) [A-Za-z0-9+/=]{16,}( .*)?$' > "$_scp_tmp"
+    if [ -s "$_scp_tmp" ] && ssh-keygen -lf "$_scp_tmp" >/dev/null 2>&1; then
+        cat "$_scp_tmp"
+        rm -f "$_scp_tmp"
+        return 0
+    fi
+    rm -f "$_scp_tmp"
+    return 1
+}
+
 ssh_key_bootstrap() {
     _key="$HOME/.ssh/id_ed25519"
     _pub="$_key.pub"
@@ -86,7 +101,7 @@ ssh_key_bootstrap() {
                 exit 0
             fi
             if nya "$_ka" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/null >/dev/null 2>&1; then
-                _remote_pub="$(nya "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null || true)"
+                _remote_pub="$(nya "$_ka" 'cat ~/.ssh/id_ed25519.pub 2>/dev/null' </dev/null 2>/dev/null | _sb_clean_pubkey || true)"
                 if [ -n "$_remote_pub" ]; then
                     printf '%s\n' "$_remote_pub" > "$_pub_file"
                     printf 'ok\t%s\n' "$_ka" > "$_rc_file"
@@ -118,9 +133,12 @@ ssh_key_bootstrap() {
                 _pf="$_remote_pubs_dir/$_a.pub"
                 if [ -s "$_pf" ]; then
                     mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys
-                    _rp="$(cat "$_pf")"
-                    grep -qxF "$_rp" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_rp" >> ~/.ssh/authorized_keys
-                    log OK "remote key from $_a installed locally"
+                    if _rp="$(_sb_clean_pubkey < "$_pf")"; then
+                        grep -qxF "$_rp" ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' "$_rp" >> ~/.ssh/authorized_keys
+                        log OK "remote key from $_a installed locally"
+                    else
+                        log WARN "remote key from $_a is not a valid public key, not installed"
+                    fi
                 fi
                 ;;
             ok-no-pub)
@@ -135,10 +153,11 @@ ssh_key_bootstrap() {
                     read -r _sc_ans </dev/tty || _sc_ans=""
                     case "$_sc_ans" in
                         [yY]|[yY][eE][sS])
-                            if ssh-copy-id -p "${_port:-8022}" -i "$_pub" "${_user:-u}@${_ip}" </dev/tty; then
-                                log OK "key installed on $_a via ssh-copy-id"
+                            if ssh-copy-id -p "${_port:-8022}" -i "$_pub" "${_user:-u}@${_ip}" </dev/tty \
+                                && ssh -p "${_port:-8022}" -o BatchMode=yes -o ConnectTimeout=5 "${_user:-u}@${_ip}" true </dev/null >/dev/null 2>&1; then
+                                log OK "key installed on $_a via ssh-copy-id (verified with BatchMode)"
                             else
-                                log WARN "ssh-copy-id failed for $_a"
+                                log WARN "ssh-copy-id did not leave key auth working for $_a"
                             fi
                             ;;
                         *) log INFO "ssh-copy-id skipped for $_a" ;;
