@@ -289,14 +289,23 @@ platform_type() {
     esac
 }
 
-# node_alias -- canonical alias for this node from the master registry, or empty.
 node_alias() {
     _identity_registry_warn_once
     _nid="$(node_id)"
-    [ -f "$NODES_DB" ] || return 0
-    _blk="$(blockdb_get "$NODES_DB" node_id "$_nid")"
-    [ -n "$_blk" ] || return 0
-    blockdb_field "$_blk" alias
+    if [ -f "$NODES_DB" ]; then
+        _blk="$(blockdb_get "$NODES_DB" node_id "$_nid")"
+        if [ -n "$_blk" ]; then
+            _na="$(blockdb_field "$_blk" alias)"
+            [ -n "$_na" ] && { printf '%s\n' "$_na"; return 0; }
+        fi
+    fi
+    # Offline-first fallback: the registry has no row for this node_id
+    # (drift, fresh clone, no network). Fall back to the local cache
+    # written by node_alias_set(), which is the node own copy of
+    # alias/user/port (see NODE_CONFIG comment above).
+    _ncl="$(_node_config_load)"
+    [ -n "$_ncl" ] || return 0
+    printf '%s\n' "${_ncl%%|*}"
 }
 
 # node_registry_row -- full registry row for this node, or empty.
