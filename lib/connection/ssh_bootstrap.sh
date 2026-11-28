@@ -145,22 +145,22 @@ ssh_key_bootstrap() {
                 log OK "key ensured on $_a"
                 ;;
             auth-failed)
-                log WARN "peer $_a reachable but key auth failed -- run once:"
-                log WARN "  ssh-copy-id -p ${_port:-8022} ${_user:-u}@${_ip}"
-                if [ "$_sb_tty" -eq 1 ] && has_cmd ssh-copy-id; then
-                    printf 'run ssh-copy-id for %s now? [y/N] ' "$_a" >&2
+                log WARN "peer $_a reachable but key auth failed -- prompting for password"
+                if [ "$_sb_tty" -eq 1 ]; then
+                    printf 'inject pubkey into %s now? [y/N] ' "$_a" >&2
                     _sc_ans=""
                     read -r _sc_ans </dev/tty || _sc_ans=""
                     case "$_sc_ans" in
                         [yY]|[yY][eE][sS])
-                            if ssh-copy-id -p "${_port:-8022}" -i "$_pub" "${_user:-u}@${_ip}" </dev/tty \
+                            if ssh -p "${_port:-8022}" -o StrictHostKeyChecking=accept-new "${_user:-u}@${_ip}" \
+                                "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && grep -qxF '$_pubdata' ~/.ssh/authorized_keys || printf '%s\n' '$_pubdata' >> ~/.ssh/authorized_keys" </dev/tty \
                                 && ssh -p "${_port:-8022}" -o BatchMode=yes -o ConnectTimeout=5 "${_user:-u}@${_ip}" true </dev/null >/dev/null 2>&1; then
-                                log OK "key installed on $_a via ssh-copy-id (verified with BatchMode)"
+                                log OK "key installed on $_a (verified with BatchMode)"
                             else
-                                log WARN "ssh-copy-id did not leave key auth working for $_a"
+                                log WARN "key injection did not leave key auth working for $_a"
                             fi
                             ;;
-                        *) log INFO "ssh-copy-id skipped for $_a" ;;
+                        *) log INFO "pubkey injection skipped for $_a" ;;
                     esac
                 fi
                 ;;
